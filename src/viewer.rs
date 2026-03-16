@@ -124,25 +124,34 @@ pub fn graph_to_json(data: &GraphData) -> String {
 }
 
 /// Generate self-contained HTML with embedded vis-network for the graph.
-pub fn generate_html(data: &GraphData) -> String {
+pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
     let _json = graph_to_json(data);
     let center_name = escape_html(&data.center_symbol.name);
 
     // Build nodes JS array
     let mut nodes_js = String::from("[");
     for (i, n) in data.nodes.iter().enumerate() {
-        let color = kind_color(&n.kind);
-        let border = if n.is_center { "#FFD700" } else { color };
-        let border_width = if n.is_center { 3 } else { 1 };
-        let file_escaped = n.file.replace('\\', "/");
+        let border_color = kind_color(&n.kind);
+        let border = if n.is_center { "#FFD700" } else { border_color };
+        let border_width = if n.is_center { 3 } else { 2 };
+        let bg_color = "#16213e";
+        
+        // Resolve absolute path for VS Code uri scheme
+        let abs_path = match repo_root.canonicalize() {
+            Ok(root) => root.join(&n.file).to_string_lossy().replace('\\', "/"),
+            Err(_) => repo_root.join(&n.file).to_string_lossy().replace('\\', "/")
+        };
+        // Remove the UNC prefix for Windows absolute paths to ensure vscode handles it correctly
+        let abs_path = abs_path.strip_prefix("//?/").unwrap_or(&abs_path).to_string();
+
         nodes_js.push_str(&format!(
-            r##"{{id:{},label:"{}",color:{{background:"{}",border:"{}"}},borderWidth:{},font:{{color:"#e0e0e0",size:12}},shape:"box",file:"{}",line:{},col:{}}}"##,
+            r##"{{id:{},label:"{}",color:{{background:"{}",border:"{}"}},borderWidth:{},font:{{color:"#e0e0e0",size:13}},shape:"box",margin:10,file:"{}",line:{},col:{}}}"##,
             n.id,
             escape_js(&n.label),
-            color,
+            bg_color,
             border,
             border_width,
-            escape_js(&file_escaped),
+            escape_js(&abs_path),
             n.line,
             n.col,
         ));
@@ -192,14 +201,14 @@ pub fn generate_html(data: &GraphData) -> String {
 </head>
 <body>
 <div id="header">
-  <h1>🔗 Link — <span>{center_name}</span></h1>
+  <h1>Link — <span>{center_name}</span></h1>
   <div id="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#4a9eff"></div>function</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#b266ff"></div>class</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#4dd0b8"></div>method</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#ff9f43"></div>variable</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#ff6b6b"></div>call</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#666"></div>other</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#61afef"></div>function</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#c678dd"></div>class/struct</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#56b6c2"></div>method</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d19a66"></div>variable</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e06c75"></div>call</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#abb2bf"></div>other</div>
   </div>
 </div>
 <div id="graph"></div>
@@ -257,14 +266,14 @@ pub fn open_graph(link_dir: &Path, data: &GraphData) -> Result<()> {
 
 fn kind_color(kind: &str) -> &'static str {
     match kind {
-        "function" => "#3b6ea5",
-        "class" => "#825ab4",
-        "method" => "#3b8c7c",
-        "variable" => "#b46e32",
-        "call" => "#a54b4b",
-        "import" => "#5c7aa5",
-        "struct" | "enum" | "type" | "interface" => "#8f6b9e",
-        _ => "#555555",
+        "function" => "#61afef",
+        "class" => "#c678dd",
+        "method" => "#56b6c2",
+        "variable" => "#d19a66",
+        "call" => "#e06c75",
+        "import" => "#98c379",
+        "struct" | "enum" | "type" | "interface" => "#e5c07b",
+        _ => "#abb2bf",
     }
 }
 
