@@ -131,27 +131,40 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
     // Build nodes JS array
     let mut nodes_js = String::from("[");
     for (i, n) in data.nodes.iter().enumerate() {
-        let border_color = kind_color(&n.kind);
-        let border = if n.is_center { "#FFD700" } else { border_color };
-        let border_width = if n.is_center { 3 } else { 2 };
-        let bg_color = "#16213e";
+        let bg_color = kind_color(&n.kind);
+        let border = if n.is_center { "#FFFFFF" } else { bg_color };
+        let border_width = if n.is_center { 3 } else { 1 };
         
         // Resolve absolute path for VS Code uri scheme
-        let abs_path = match repo_root.canonicalize() {
-            Ok(root) => root.join(&n.file).to_string_lossy().replace('\\', "/"),
-            Err(_) => repo_root.join(&n.file).to_string_lossy().replace('\\', "/")
+        let mut abs_path = match repo_root.canonicalize() {
+            Ok(root) => root.join(&n.file).to_string_lossy().to_string(),
+            Err(_) => repo_root.join(&n.file).to_string_lossy().to_string(),
         };
-        // Remove the UNC prefix for Windows absolute paths to ensure vscode handles it correctly
-        let abs_path = abs_path.strip_prefix("//?/").unwrap_or(&abs_path).to_string();
+
+        // canonicalize() on Windows returns UNC paths `\\?\D:\...`
+        if abs_path.starts_with(r"\\?\") {
+            abs_path = abs_path[4..].to_string();
+        } else if abs_path.starts_with(r"\\?\UNC\") {
+            abs_path = format!(r"\\{}", &abs_path[8..]);
+        }
+        
+        let abs_path = abs_path.replace('\\', "/");
+        // VS Code on Windows often expects a leading slash before the drive letter for file URIs:
+        // `vscode://file/D:/...`
+        let uri_path = if abs_path.chars().nth(1) == Some(':') {
+            format!("/{}", abs_path)
+        } else {
+            abs_path.clone()
+        };
 
         nodes_js.push_str(&format!(
-            r##"{{id:{},label:"{}",color:{{background:"{}",border:"{}"}},borderWidth:{},font:{{color:"#e0e0e0",size:13}},shape:"box",margin:10,file:"{}",line:{},col:{}}}"##,
+            r##"{{id:{},label:"{}",color:{{background:"{}",border:"{}"}},borderWidth:{},font:{{color:"#1a1a2e",size:13}},shape:"box",margin:10,file:"{}",line:{},col:{}}}"##,
             n.id,
             escape_js(&n.label),
             bg_color,
             border,
             border_width,
-            escape_js(&abs_path),
+            escape_js(&uri_path),
             n.line,
             n.col,
         ));
