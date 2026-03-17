@@ -63,8 +63,9 @@ Linkmap is easiest to install via a package manager once you publish a release.
 - Windows (Scoop):
 
 ```powershell
-# after you publish a Scoop bucket repo:
-scoop bucket add linkmap https://github.com/AshleyImmanuel/linkmap-scoop-bucket
+# after you publish a GitHub Release tag (like v0.1.0):
+# this repo can act as the Scoop bucket
+scoop bucket add linkmap https://github.com/AshleyImmanuel/link_tool
 scoop install linkmap
 ```
 
