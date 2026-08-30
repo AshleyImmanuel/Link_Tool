@@ -41,29 +41,33 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare artifacts
-        shell: bash
+      - name: Prepare + package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp "target/${{ matrix.target }}/release/${{ matrix.exe }}" "dist/${{ matrix.exe }}"
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist,out | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.exe }}" "dist/${{ matrix.exe }}"
+          $version = $env:GITHUB_REF_NAME -replace '^v',''
+          $zip1 = "out/linkmap-$version-${{ matrix.asset_suffix }}.zip"
+          $zip2 = "out/linkmap-windows-x86_64.zip"
+          if (Test-Path $zip1) { Remove-Item $zip1 -Force }
+          Compress-Archive -Path "dist/${{ matrix.exe }}" -DestinationPath $zip1 -CompressionLevel Optimal
+          Copy-Item $zip1 $zip2 -Force
 
-      - name: Package artifacts
+      - name: Prepare + package (Linux/macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out
+          mkdir -p dist out
+          cp "target/${{ matrix.target }}/release/${{ matrix.exe }}" "dist/${{ matrix.exe }}"
           version="${GITHUB_REF_NAME#v}"
-          if [[ "${{ matrix.exe }}" == "linkmap.exe" ]]; then
-            (cd dist && zip -9 "../out/linkmap-${version}-${{ matrix.asset_suffix }}.zip" "${{ matrix.exe }}")
-            cp "out/linkmap-${version}-${{ matrix.asset_suffix }}.zip" "out/linkmap-windows-x86_64.zip"
-          else
-            (cd dist && tar -czf "../out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "${{ matrix.exe }}")
-            if [[ "${{ matrix.asset_suffix }}" == "linux-x86_64" ]]; then
-              cp "out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "out/linkmap-linux-x86_64.tar.gz"
-            elif [[ "${{ matrix.asset_suffix }}" == "macos-x86_64" ]]; then
-              cp "out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "out/linkmap-macos-x86_64.tar.gz"
-            fi
+          (cd dist && tar -czf "../out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "${{ matrix.exe }}")
+          if [[ "${{ matrix.asset_suffix }}" == "linux-x86_64" ]]; then
+            cp "out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "out/linkmap-linux-x86_64.tar.gz"
+          elif [[ "${{ matrix.asset_suffix }}" == "macos-x86_64" ]]; then
+            cp "out/linkmap-${version}-${{ matrix.asset_suffix }}.tar.gz" "out/linkmap-macos-x86_64.tar.gz"
           fi
 
       - name: Upload artifacts
