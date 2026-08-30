@@ -1,77 +1,91 @@
 # Linkmap user manual
 
-Linkmap is a local CLI that indexes code structure (best-effort static analysis) and lets you explore it as a graph.
+This is a practical guide for new users.
 
-## Quick start
+Linkmap helps you answer questions like:
 
-From your repository root:
+- “Where is this thing defined?”
+- “What calls this function / uses this component?”
+- “If I change X, what else might be impacted?”
 
-```bash
-linkmap init
-linkmap search <query>
-linkmap show <symbol>
-linkmap update
-```
+It does this by building a **local index** of your repo, then showing a **graph view** (plus search, stats, and snapshots).
 
-- `linkmap init`: creates/rebuilds `.link/index.db`
-- `linkmap update`: incrementally re-indexes changed files
-- `linkmap show`: opens the HTML viewer at `.link/show.html`
+## Before you start (1 minute)
 
-## Mental model
+- Run Linkmap **from the root of the repo** you want to analyze.
+- Linkmap writes a local cache under **`.link/`** (inside your repo).
+- It’s intentionally best‑effort: it may miss some links rather than guess.
 
-Linkmap stores two core things:
-
-- **Symbols**: definitions and extracted items like routes/handlers/components
-- **Edges**: relationships like calls/imports/renders/routes-to
-
-Linkmap is intentionally conservative: it prefers **skipping ambiguous edges** over guessing.
-
-## Commands
-
-### `linkmap init`
-
-Build a fresh index for the current repo:
+## Quick start (most common workflow)
 
 ```bash
 linkmap init
+linkmap search <name>
+linkmap show <name>
 ```
 
-Notes:
+Example:
 
-- Writes only inside `.link/`
-- Skips common build/vendor directories
-- Skips large files (safety + performance)
+```bash
+linkmap init
+linkmap search HeroSection
+linkmap show HeroSection
+```
 
-### `linkmap update`
-
-Refresh an existing index by re-indexing changed/new/deleted files:
+After you edit code later:
 
 ```bash
 linkmap update
 ```
 
-If you see an “index format out of date” message, run `linkmap init`.
+## What Linkmap indexes (plain English)
 
-### `linkmap list`
+Linkmap stores:
 
-List indexed definition symbols:
+- **Symbols**: “things in code” (functions, classes, components, routes, handlers)
+- **Edges**: “relationships” (calls, imports, renders, route → handler)
+
+In the viewer you’ll see dots/colors for different symbol kinds (component/route/function/call/etc.).
+
+## Commands (with when to use them)
+
+### `linkmap init` (first run, or when it complains)
+
+Use this when:
+
+- You run Linkmap in a repo for the first time
+- You see: “index format is missing or out of date”
 
 ```bash
-linkmap list
+linkmap init
 ```
 
-### `linkmap search <query>`
+What it does:
 
-Fuzzy search symbols by name:
+- Scans the repo and builds `.link/index.db`
+- Skips common build/vendor folders
+- Skips very large files for safety/performance
+
+### `linkmap update` (after code changes)
+
+Use this after you change code and want the index updated quickly:
+
+```bash
+linkmap update
+```
+
+### `linkmap search <query>` (find the right symbol)
+
+Use this when you don’t remember the exact name or there are multiple matches:
 
 ```bash
 linkmap search router
-linkmap search HeroSection
+linkmap search GET
 ```
 
-### `linkmap show <symbol>`
+### `linkmap show <symbol>` (open the graph)
 
-Open the graph viewer centered on a symbol:
+Use this when you want to *see connections* (what calls/imports/renders what):
 
 ```bash
 linkmap show generate_html
@@ -79,105 +93,119 @@ linkmap show generate_html
 
 Options:
 
-- `--json`: print graph payload as JSON instead of opening the viewer
+- `--json`: print the graph JSON instead of opening the browser
 
-Viewer tips:
+Viewer basics:
 
-- Double-click a node to open it in VS Code (via `vscode://file/...`)
-- Use the search box to jump to a node
+- Use **Fit** to zoom out and see everything
+- Use the **search box** to jump to a node
+- Double‑click a node to open it in VS Code (via `vscode://file/...`)
 
-### `linkmap snapshot`
+### `linkmap list` (browse indexed definitions)
 
-Write a portable structure snapshot:
+```bash
+linkmap list
+```
+
+### `linkmap snapshot` (save a “structure snapshot”)
+
+Use this when you want to save/share the current architecture state:
 
 ```bash
 linkmap snapshot
-linkmap snapshot --out my-snapshot.json
+linkmap snapshot --out before.json
 ```
 
-Default output is `.link/snapshot.json`.
+### `linkmap diff <from> <to>` (compare snapshots)
 
-### `linkmap diff <from> <to>`
-
-Compare two snapshots:
+Use this to see structural changes between two snapshots:
 
 ```bash
-linkmap diff .link/snapshot.json other.json
+linkmap diff before.json after.json
 ```
 
 Options:
 
-- `--json`: print diff payload as JSON
+- `--json`: machine‑readable output
 
-### `linkmap history`
-
-Show project-local command history stored in `.link/index.db`:
+### `linkmap history` (see what you ran)
 
 ```bash
 linkmap history
 linkmap history --all
 ```
 
-### `linkmap stats`
+### `linkmap stats` (repo health + change summary)
 
-Show index stats plus lightweight helpers:
-
-- heuristic architecture checks (import layering hints)
-- git-aware change summary (local working tree vs `HEAD`)
+Use this to get a quick overview:
 
 ```bash
 linkmap stats
 ```
 
-### `linkmap explain <symbol | path>`
+It includes:
 
-Explain a symbol’s relationships and warnings, or explain a path query:
+- Index counts (files/symbols/edges)
+- Lightweight architecture hints (heuristics)
+- Git-aware change summary (working tree vs `HEAD`)
+
+### `linkmap explain <query>` (text explanation)
+
+Use this when you want a readable explanation instead of a graph:
 
 ```bash
-linkmap explain generate_html
+linkmap explain SomeSymbol
 linkmap explain "A -> B"
 ```
 
 ## Supported languages (v1)
 
-Indexing is Tree-sitter + queries + heuristics. Currently supported:
-
 - JavaScript / TypeScript / TSX
 - Python
 - Go
 - Rust
-- PHP (including Laravel route helper)
+- PHP
+
+Extra helpers (best-effort):
+
+- Express routes (Node): `app.get("/path", handler)` → route nodes like `GET /path`
+- Laravel routes (PHP): `Route::get("/path", "Controller@method")` → route nodes like `GET /path`
 
 ## Troubleshooting
 
 ### “index format is missing or out of date”
 
-Run:
-
 ```bash
 linkmap init
 ```
 
-### The viewer opens but looks empty
+### The viewer opens but looks empty / no nodes
 
-Try `Fit` in the toolbar, or regenerate after re-indexing:
+- Click **Fit**
+- If it still looks wrong, rebuild the index:
 
 ```bash
 linkmap init
 linkmap show <symbol>
 ```
 
-### Routes aren’t showing
+### Routes aren’t detected
 
-Route extraction is best-effort and framework-specific. If you find a pattern Linkmap misses, open an issue and include a minimal example.
+Route support is pattern-based. If your framework uses a different style, Linkmap may miss it. If you report it, include a small code snippet that shows the route style.
 
-## Safety and scope
+## Safety and limits (important)
 
-Linkmap is **best-effort static analysis**, not a type checker or runtime tracer:
+Linkmap is **not** a type-checker or runtime tracer. It won’t understand every dynamic pattern.
 
-- no type inference
-- no dynamic dispatch tracing
-- conservative matching (skips ambiguous edges)
+What it *won’t* do:
 
-It is designed for local use and writes only under `.link/`.
+- type inference
+- runtime dispatch tracing
+- “eval/reflection” understanding
+
+What it *will* do:
+
+- stay local/offline
+- write only under `.link/`
+- prefer “no edge” over a wrong edge
 
