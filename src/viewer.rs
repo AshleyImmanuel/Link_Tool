@@ -254,7 +254,7 @@ var options = {{
 }};
 var network = new vis.Network(container, data, options);
 network.focus({center_id}, {{ scale: 1.0, animation: true }});
-network.on('click', function(params) {{
+network.on('doubleClick', function(params) {{
   if (params.nodes.length > 0) {{
     var node = nodes.get(params.nodes[0]);
     if (node && node.file) {{
