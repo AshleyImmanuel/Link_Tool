@@ -51,7 +51,7 @@ If you find issues, contact Ashley via LinkedIn: `https://www.linkedin.com/in/as
 ### Install via `curl` (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/link_tool/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/install.sh | sh
 ```
 
 This installs `linkmap` to `~/.local/bin/linkmap`.
@@ -65,7 +65,7 @@ Linkmap is easiest to install via a package manager once you publish a release.
 ```powershell
 # after you publish a GitHub Release tag (like v0.1.0):
 # this repo can act as the Scoop bucket
-scoop bucket add linkmap https://github.com/AshleyImmanuel/link_tool
+scoop bucket add linkmap https://github.com/AshleyImmanuel/Link_Tool
 scoop install linkmap
 ```
 

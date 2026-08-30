@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO_DEFAULT="AshleyImmanuel/link_tool"
+REPO_DEFAULT="AshleyImmanuel/Link_Tool"
 REPO="${LINKMAP_REPO:-$REPO_DEFAULT}"
 VERSION="${LINKMAP_VERSION:-latest}"
 INSTALL_DIR="${LINKMAP_INSTALL_DIR:-$HOME/.local/bin}"

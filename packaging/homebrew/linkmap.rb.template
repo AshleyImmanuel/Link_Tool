@@ -1,25 +1,34 @@
 class Linkmap < Formula
   desc "Git for understanding code. Fast, local, static code structure analysis."
-  homepage "https://github.com/AshleyImmanuel/link_tool"
+  homepage "https://github.com/AshleyImmanuel/Link_Tool"
   license "MIT"
   version "0.1.0"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/AshleyImmanuel/link_tool/releases/download/v0.1.0/linkmap-0.1.0-macos-x86_64.tar.gz"
+      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.0/linkmap-0.1.0-macos-x86_64.tar.gz"
       sha256 "REPLACE_WITH_SHA256"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/AshleyImmanuel/link_tool/releases/download/v0.1.0/linkmap-0.1.0-linux-x86_64.tar.gz"
+      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.0/linkmap-0.1.0-linux-x86_64.tar.gz"
       sha256 "REPLACE_WITH_SHA256"
     end
   end
 
   def install
     bin.install "linkmap"
+  end
+
+  def caveats
+    <<~EOS
+      Linkmap is an experimental hobby project and is still under review. Use at your own risk.
+
+      If you find issues, contact Ashley via LinkedIn:
+        https://www.linkedin.com/in/ashley-immanuel-81609731b/
+    EOS
   end
 
   test do
