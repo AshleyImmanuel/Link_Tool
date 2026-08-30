@@ -8,13 +8,13 @@ Linkmap helps you answer questions like:
 - “What calls this function / uses this component?”
 - “If I change X, what else might be impacted?”
 
-It does this by building a **local index** of your repo, then showing a **graph view** (plus search, stats, and snapshots).
+It does this by making a **local map** of your project, then showing a **graph** (a picture of how things connect).
 
 ## Before you start (1 minute)
 
 - Run Linkmap **from the root of the repo** you want to analyze.
-- Linkmap writes a local cache under **`.link/`** (inside your repo).
-- It’s intentionally best‑effort: it may miss some links rather than guess.
+- Linkmap saves its local data in a folder named **`.link/`** (inside your repo).
+- It tries to be safe: if it’s not sure about a connection, it may skip it instead of guessing.
 
 ## Quick start (most common workflow)
 
@@ -38,14 +38,14 @@ After you edit code later:
 linkmap update
 ```
 
-## What Linkmap indexes (plain English)
+## What Linkmap “understands” (plain English)
 
 Linkmap stores:
 
-- **Symbols**: “things in code” (functions, classes, components, routes, handlers)
-- **Edges**: “relationships” (calls, imports, renders, route → handler)
+- **Things**: functions, classes, components, routes, handlers
+- **Connections**: “this calls that”, “this imports that”, “this route goes to that handler”, etc.
 
-In the viewer you’ll see dots/colors for different symbol kinds (component/route/function/call/etc.).
+In the viewer you’ll see dots/colors for different types (component/route/function/call/etc.).
 
 ## Commands (with when to use them)
 
@@ -74,7 +74,7 @@ Use this after you change code and want the index updated quickly:
 linkmap update
 ```
 
-### `linkmap search <query>` (find the right symbol)
+### `linkmap search <query>` (find the right thing)
 
 Use this when you don’t remember the exact name or there are multiple matches:
 
@@ -83,7 +83,7 @@ linkmap search router
 linkmap search GET
 ```
 
-### `linkmap show <symbol>` (open the graph)
+### `linkmap show <name>` (open the graph)
 
 Use this when you want to *see connections* (what calls/imports/renders what):
 
@@ -98,18 +98,18 @@ Options:
 Viewer basics:
 
 - Use **Fit** to zoom out and see everything
-- Use the **search box** to jump to a node
-- Double‑click a node to open it in VS Code (via `vscode://file/...`)
+- Use the **search box** to jump to a box in the graph
+- Double‑click a box to open it in VS Code
 
-### `linkmap list` (browse indexed definitions)
+### `linkmap list` (browse what Linkmap found)
 
 ```bash
 linkmap list
 ```
 
-### `linkmap snapshot` (save a “structure snapshot”)
+### `linkmap snapshot` (save a “project snapshot”)
 
-Use this when you want to save/share the current architecture state:
+Use this when you want to save/share the current “shape” of the project:
 
 ```bash
 linkmap snapshot
@@ -135,7 +135,7 @@ linkmap history
 linkmap history --all
 ```
 
-### `linkmap stats` (repo health + change summary)
+### `linkmap stats` (quick overview)
 
 Use this to get a quick overview:
 
@@ -145,11 +145,11 @@ linkmap stats
 
 It includes:
 
-- Index counts (files/symbols/edges)
-- Lightweight architecture hints (heuristics)
+- Counts (how many files / things / connections were found)
+- Simple architecture hints
 - Git-aware change summary (working tree vs `HEAD`)
 
-### `linkmap explain <query>` (text explanation)
+### `linkmap explain <query>` (simple text explanation)
 
 Use this when you want a readable explanation instead of a graph:
 
@@ -195,7 +195,7 @@ Route support is pattern-based. If your framework uses a different style, Linkma
 
 ## Safety and limits (important)
 
-Linkmap is **not** a type-checker or runtime tracer. It won’t understand every dynamic pattern.
+Linkmap is **not perfect** and it doesn’t run your code. It won’t understand every dynamic trick.
 
 What it *won’t* do:
 
