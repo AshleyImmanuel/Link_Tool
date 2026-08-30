@@ -11,6 +11,8 @@ It is intentionally simple:
 - best-effort static analysis
 - no servers, agents, or background daemons
 
+User manual: [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md)
+
 ## What Link Does
 
 Link indexes definitions, calls, and imports, then lets you:
