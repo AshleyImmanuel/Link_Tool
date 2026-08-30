@@ -1,0 +1,93 @@
+name: Scoop manifest
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  update-manifest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Switch to main branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch main
+
+      - name: Compute version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch SHA256 for Windows zip
+        id: sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.ver.outputs.version }}"
+          sums_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/SHA256SUMS"
+          echo "Downloading $sums_url"
+          curl -fsSL "$sums_url" -o SHA256SUMS
+          target="linkmap-${version}-windows-x86_64.zip"
+          hash="$(grep " ${target}$" SHA256SUMS | awk '{print $1}')"
+          if [[ -z "${hash}" ]]; then
+            echo "Could not find hash for ${target} in SHA256SUMS"
+            cat SHA256SUMS
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Update bucket/linkmap.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.ver.outputs.version }}"
+          hash="${{ steps.sha.outputs.hash }}"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/linkmap-${version}-windows-x86_64.zip"
+
+          python - <<'PY'
+          import json, os
+          path = "bucket/linkmap.json"
+          with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+          version = os.environ["VERSION"]
+          url = os.environ["URL"]
+          sha = os.environ["SHA"]
+          data["version"] = version
+          data.setdefault("architecture", {}).setdefault("64bit", {})["url"] = url
+          data["architecture"]["64bit"]["hash"] = sha
+          with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+          PY
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          URL: https://github.com/${{ github.repository }}/releases/download/v${{ steps.ver.outputs.version }}/linkmap-${{ steps.ver.outputs.version }}-windows-x86_64.zip
+          SHA: ${{ steps.sha.outputs.hash }}
+
+      - name: Commit and push manifest update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add bucket/linkmap.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(scoop): update manifest for v${{ steps.ver.outputs.version }}"
+          git push origin HEAD:main
+
