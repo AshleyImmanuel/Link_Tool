@@ -1,5 +1,7 @@
 /target
 /.link/
+/.cursor/
+/.codex/
 /.codex-*/
 /tmp/
 /error.log
@@ -7,3 +9,4 @@
 /build_errors.txt
 /test_out.txt
 /link.exe
+/linkmap.exe

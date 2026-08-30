@@ -1,0 +1,29 @@
+class Linkmap < Formula
+  desc "Git for understanding code. Fast, local, static code structure analysis."
+  homepage "https://github.com/AshleyImmanuel/link_tool"
+  license "MIT"
+  version "0.1.0"
+
+  on_macos do
+    if Hardware::CPU.intel?
+      url "https://github.com/AshleyImmanuel/link_tool/releases/download/v0.1.0/linkmap-0.1.0-macos-x86_64.tar.gz"
+      sha256 "REPLACE_WITH_SHA256"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.intel?
+      url "https://github.com/AshleyImmanuel/link_tool/releases/download/v0.1.0/linkmap-0.1.0-linux-x86_64.tar.gz"
+      sha256 "REPLACE_WITH_SHA256"
+    end
+  end
+
+  def install
+    bin.install "linkmap"
+  end
+
+  test do
+    system "#{bin}/linkmap", "--version"
+  end
+end
+

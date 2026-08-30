@@ -7,6 +7,7 @@ use crate::extractor::ExtractorPool;
 use crate::hasher;
 use crate::resolver;
 use crate::scan;
+use crate::ui;
 
 pub fn run(quiet: bool) -> Result<()> {
     let start = Instant::now();
@@ -40,7 +41,10 @@ pub fn run(quiet: bool) -> Result<()> {
                 Ok(source) => source,
                 Err(err) => {
                     if !quiet {
-                        eprintln!("warning: failed to read file {}: {err}", file.rel_path);
+                        ui::warn(
+                            quiet,
+                            format!("failed to read file {}: {err}", file.rel_path),
+                        );
                     }
                     continue;
                 }
@@ -48,26 +52,39 @@ pub fn run(quiet: bool) -> Result<()> {
 
             if std::str::from_utf8(&source).is_err() {
                 if !quiet {
-                    eprintln!("warning: skipping non-UTF8 file {}", file.rel_path);
+                    ui::warn(quiet, format!("skipping non-UTF8 file {}", file.rel_path));
                 }
                 continue;
             }
 
-            let extracts = match extractor.extract(&source, file.lang) {
+            let mut extracts = match extractor.extract(&source, file.lang) {
                 Ok(extracts) => extracts,
                 Err(err) => {
                     if !quiet {
-                        eprintln!("warning: failed to parse file {}: {err}", file.rel_path);
+                        ui::warn(
+                            quiet,
+                            format!("failed to parse file {}: {err}", file.rel_path),
+                        );
                     }
                     continue;
                 }
             };
+            if matches!(file.lang, crate::lang::Lang::Php) && file.rel_path.starts_with("routes/") {
+                if let Ok(text) = std::str::from_utf8(&source) {
+                    extracts.routes.extend(
+                        crate::framework::laravel::extract_routes_from_routes_php(text),
+                    );
+                }
+            }
 
             let hash = hasher::hash_bytes(&source);
             insert_extracts(db, file, &extracts, &hash)?;
             indexed_files += 1;
-            total_symbols +=
-                (extracts.symbols.len() + extracts.calls.len() + extracts.imports.len()) as u64;
+            total_symbols += (extracts.symbols.len()
+                + extracts.calls.len()
+                + extracts.renders.len()
+                + extracts.imports.len()
+                + extracts.routes.len()) as u64;
         }
 
         db.clear_edges()?;
@@ -81,16 +98,29 @@ pub fn run(quiet: bool) -> Result<()> {
     let edge_count = db.edge_count()?;
 
     if !quiet {
-        println!(
-            "Initialized .link/index.db\n  {} files | {} symbols | {} edges | {:.1}s\n  ({} calls resolved, {} ambiguous, {} imports linked)",
+        ui::info(
+            quiet,
+            format!(
+            "Initialized .link/index.db\n  {} files | {} symbols | {} edges | {:.1}s\n  ({} calls resolved, {} renders resolved, {} ambiguous, {} imports linked)",
             indexed_files,
             total_symbols,
             edge_count,
             elapsed.as_secs_f64(),
             resolve_stats.resolved,
+            resolve_stats.renders,
             resolve_stats.ambiguous,
             resolve_stats.imports,
+        ),
         );
+        if resolve_stats.ambiguous > 0 {
+            ui::warn(
+                quiet,
+                format!(
+                    "skipped {} ambiguous matches (conservative on purpose)",
+                    resolve_stats.ambiguous
+                ),
+            );
+        }
     }
 
     Ok(())
@@ -126,6 +156,18 @@ fn insert_extracts(
         )?;
     }
 
+    for render in &extracts.renders {
+        db.insert_symbol(
+            &render.component_name,
+            "render",
+            &file.rel_path,
+            render.line,
+            render.col,
+            0,
+            0,
+        )?;
+    }
+
     for import in &extracts.imports {
         db.insert_symbol(
             &import.imported_name,
@@ -136,6 +178,26 @@ fn insert_extracts(
             0,
             0,
         )?;
+        db.insert_import_ref(
+            &file.rel_path,
+            &import.imported_name,
+            &import.source_module,
+            import.line,
+        )?;
+    }
+
+    for route in &extracts.routes {
+        let route_name = format!("{} {}", route.method, route.path);
+        let route_id = db.insert_symbol(
+            &route_name,
+            "route",
+            &file.rel_path,
+            route.line,
+            route.col,
+            0,
+            0,
+        )?;
+        db.insert_route_ref(route_id, &route.handler_name, &file.rel_path, route.line)?;
     }
 
     db.upsert_file(&file.rel_path, hash, file.lang.name(), file.last_modified)?;

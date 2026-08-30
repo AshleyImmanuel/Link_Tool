@@ -1,7 +1,10 @@
+pub mod diff;
 pub mod explain;
+pub mod history;
 pub mod init;
 pub mod list;
 pub mod search;
 pub mod show;
+pub mod snapshot;
 pub mod stats;
 pub mod update;

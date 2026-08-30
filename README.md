@@ -6,7 +6,7 @@ Link is a local CLI for exploring code structure. It parses source files with Tr
 
 It is intentionally simple:
 
-- local only
+- local only, including git-aware views of the current working tree
 - offline only
 - best-effort static analysis
 - no servers, agents, or background daemons
@@ -28,8 +28,55 @@ Supported languages:
 - Python
 - Go
 - Rust
+- PHP
+
+Stack-aware helpers (best-effort):
+
+- Express route extraction: `app.get("/path", handler)` / `router.post(...)` become `route` nodes like `GET /path`
+- Laravel basic routes: `Route::get('/path', 'Controller@method')` become `route` nodes like `GET /path`
 
 ## Installation
+
+### Disclaimer
+
+Linkmap is an **experimental hobby project** and is still under review. Use at your own risk.
+
+If you find issues, contact Ashley via LinkedIn: `https://www.linkedin.com/in/ashley-immanuel-81609731b/`
+
+### Install (recommended)
+
+- Download the latest prebuilt binary from GitHub Releases.
+- Verify the SHA256 checksum file shipped with the release.
+
+### Install via `curl` (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/link_tool/main/install.sh | sh
+```
+
+This installs `linkmap` to `~/.local/bin/linkmap`.
+
+### Install via package managers (Git-style)
+
+Linkmap is easiest to install via a package manager once you publish a release.
+
+- Windows (Scoop):
+
+```powershell
+# after you publish a Scoop bucket repo:
+scoop bucket add linkmap https://github.com/AshleyImmanuel/linkmap-scoop-bucket
+scoop install linkmap
+```
+
+- macOS/Linux (Homebrew):
+
+```bash
+# after you publish a Homebrew tap repo:
+brew tap ashleyimmanuel/linkmap
+brew install linkmap
+```
+
+### Install from source (Cargo)
 
 Install Rust and Cargo from [rustup.rs](https://rustup.rs/), then build Link from source:
 
@@ -40,7 +87,7 @@ cargo build --release
 The binary will be available at:
 
 ```bash
-target/release/link
+target/release/linkmap
 ```
 
 You can also install it into Cargo's bin directory:
@@ -49,20 +96,26 @@ You can also install it into Cargo's bin directory:
 cargo install --path .
 ```
 
+### Versioning and releases
+
+- Public releases are tagged as `vX.Y.Z`.
+- Release artifacts include `.zip`/`.tar.gz` packages plus a `SHA256SUMS` file.
+
 ## Quick Start
 
 Run Link from the root of the repository you want to inspect.
 
 ```bash
-link init
-link search calculate
-link show calculate
-link update
+linkmap init
+linkmap search calculate
+linkmap show calculate
+linkmap history
+linkmap update
 ```
 
-`link init` creates a local index at `.link/index.db`.
+`linkmap init` creates a local index at `.link/index.db`.
 
-`link show <symbol>` opens `.link/show.html` in your browser. Double-clicking a node attempts to open the corresponding file in VS Code via the `vscode://file/...` URI scheme.
+`linkmap show <symbol>` opens `.link/show.html` in your browser. Double-clicking a node attempts to open the corresponding file in VS Code via the `vscode://file/...` URI scheme.
 
 ## Upgrade and Rebuild
 
@@ -71,42 +124,74 @@ link update
 If you upgrade Link and it reports that the index format is out of date, run:
 
 ```bash
-link init
+linkmap init
 ```
 
-`link update` refreshes an existing compatible index. It is not a migration command.
+`linkmap update` refreshes an existing compatible index. It is not a migration command.
 
 ## Command Reference
 
-### `link init`
+### `linkmap init`
 
 Scans the current directory, indexes supported source files, and rebuilds `.link/index.db`.
 
-### `link show <symbol>`
+### `linkmap show <symbol>`
 
 Shows the caller/callee neighborhood for an indexed symbol.
 
 - default mode: opens the HTML graph viewer
 - `--json`: prints the graph payload to stdout
 
-### `link list`
+### `linkmap list`
 
 Lists indexed definition symbols and their locations.
 
-### `link search <query>`
+### `linkmap search <query>`
 
 Performs a name-based fuzzy search against indexed symbols.
 
-### `link update`
+### `linkmap update`
 
 Re-indexes only changed, new, and deleted files, then rebuilds relationships.
 
+### `linkmap snapshot`
+
+Writes a portable structure snapshot to a JSON file.
+
+- default path: `.link/snapshot.json`
+- `--out <path>`: write to a custom path
+
+### `linkmap diff <from> <to>`
+
+Shows a structural diff between two snapshot files.
+
+- default mode: prints a human-friendly change report
+- `--json`: prints the diff payload as JSON
+
 ### Optional commands
 
-- `link stats`
-- `link explain <symbol>`
+- `linkmap history`: project-local command history, with current-session filtering when a shell session id is available
+- `linkmap stats`: index metrics, heuristic architecture checks, and local git-aware change summaries
+- `linkmap explain <symbol>`: text explanations of symbol connections, impact hints, and heuristic warnings
 
 These remain lightweight helpers and are not required for normal use.
+
+### `linkmap history`
+
+Shows recent `linkmap` commands recorded for the current project.
+
+- By default, it uses the current shell session when Link can detect one from environment markers such as `LINK_SESSION_ID`, `WT_SESSION`, or `TERM_SESSION_ID`.
+- `linkmap history --all` shows the full recorded project history.
+- History is stored locally in `.link/index.db` and survives `link init`.
+
+### `linkmap stats`
+
+Shows index counts plus two local-only helpers:
+
+- `Architecture Rules` are built-in heuristic import checks for common UI/server layering issues.
+- `Change Summary` compares the local git working tree to `HEAD` using extracted symbol, import, call, and render signatures.
+
+These sections are intentionally lightweight. They are not a configurable policy engine or a full semantic diff.
 
 ## Exit Codes
 
@@ -154,6 +239,10 @@ Link is best-effort static analysis, not a type checker or runtime tracer.
 - No reflection or `eval` support
 - No guarantee that every call/import can be resolved
 - Ambiguous matches are skipped on purpose
+- Architecture rules are built-in heuristics, not a full configurable policy engine
+- Git-aware change summaries compare the local working tree to `HEAD`; they do not inspect remotes or push state
+- Change summaries diff extracted symbols/imports/calls/renders, so they are structural hints rather than full semantic analysis
+- Session-scoped command history depends on shell or terminal session ids being available; otherwise Link falls back to all recorded project history
 
 This means results are useful for navigation and architecture understanding, but they are not a proof of program behavior.
 

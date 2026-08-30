@@ -22,9 +22,11 @@ pub fn parse_with(parser: &mut Parser, source: &[u8], lang: Lang) -> Result<Tree
 pub fn query_str(lang: Lang) -> &'static str {
     match lang {
         Lang::JavaScript => include_str!("../queries/javascript.scm"),
-        Lang::TypeScript | Lang::Tsx => include_str!("../queries/typescript.scm"),
+        Lang::TypeScript => include_str!("../queries/typescript.scm"),
+        Lang::Tsx => include_str!("../queries/tsx.scm"),
         Lang::Python => include_str!("../queries/python.scm"),
         Lang::Go => include_str!("../queries/go.scm"),
         Lang::Rust => include_str!("../queries/rust.scm"),
+        Lang::Php => include_str!("../queries/php.scm"),
     }
 }

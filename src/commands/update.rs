@@ -9,6 +9,7 @@ use crate::extractor::ExtractorPool;
 use crate::hasher;
 use crate::resolver;
 use crate::scan;
+use crate::ui;
 
 pub fn run(quiet: bool) -> Result<()> {
     let start = Instant::now();
@@ -16,7 +17,7 @@ pub fn run(quiet: bool) -> Result<()> {
     let link_dir = cwd.join(".link");
 
     if !link_dir.join("index.db").exists() {
-        return Err(user_error("not a Link project. Run 'link init' first."));
+        return Err(user_error("not a Link project. Run 'linkmap init' first."));
     }
 
     let db = Db::open_index(&link_dir)?;
@@ -36,7 +37,10 @@ pub fn run(quiet: bool) -> Result<()> {
             Ok(source) => source,
             Err(err) => {
                 if !quiet {
-                    eprintln!("warning: failed to read file {}: {err}", file.rel_path);
+                    ui::warn(
+                        quiet,
+                        format!("failed to read file {}: {err}", file.rel_path),
+                    );
                 }
                 continue;
             }
@@ -88,15 +92,28 @@ pub fn run(quiet: bool) -> Result<()> {
     let elapsed = start.elapsed();
 
     if !quiet {
-        println!(
-            "Updated: +{} new, ~{} changed, -{} deleted | {:.1}s\n  {} calls resolved, {} imports linked",
+        ui::info(
+            quiet,
+            format!(
+            "Updated: +{} new, ~{} changed, -{} deleted | {:.1}s\n  {} calls resolved, {} renders resolved, {} imports linked",
             indexed_new,
             indexed_changed,
             deleted.len(),
             elapsed.as_secs_f64(),
             resolve_stats.resolved,
+            resolve_stats.renders,
             resolve_stats.imports,
+        ),
         );
+        if resolve_stats.ambiguous > 0 {
+            ui::warn(
+                quiet,
+                format!(
+                    "skipped {} ambiguous matches (conservative on purpose)",
+                    resolve_stats.ambiguous
+                ),
+            );
+        }
     }
 
     Ok(())
@@ -164,23 +181,37 @@ fn reindex_file(
 
     if std::str::from_utf8(&source).is_err() {
         if !quiet {
-            eprintln!("warning: skipping non-UTF8 file {}", pending.file.rel_path);
+            ui::warn(
+                quiet,
+                format!("skipping non-UTF8 file {}", pending.file.rel_path),
+            );
         }
         return Ok(false);
     }
 
-    let extracts = match extractor.extract(&source, pending.file.lang) {
+    let mut extracts = match extractor.extract(&source, pending.file.lang) {
         Ok(extracts) => extracts,
         Err(err) => {
             if !quiet {
-                eprintln!(
-                    "warning: failed to parse file {}: {err}",
-                    pending.file.rel_path
+                ui::warn(
+                    quiet,
+                    format!("failed to parse file {}: {err}", pending.file.rel_path),
                 );
             }
             return Ok(false);
         }
     };
+    if matches!(pending.file.lang, crate::lang::Lang::Php)
+        && pending.file.rel_path.starts_with("routes/")
+    {
+        if let Ok(text) = std::str::from_utf8(&source) {
+            extracts
+                .routes
+                .extend(crate::framework::laravel::extract_routes_from_routes_php(
+                    text,
+                ));
+        }
+    }
 
     if replace_existing {
         db.delete_symbols_for_file(&pending.file.rel_path)?;
@@ -210,6 +241,18 @@ fn reindex_file(
         )?;
     }
 
+    for render in &extracts.renders {
+        db.insert_symbol(
+            &render.component_name,
+            "render",
+            &pending.file.rel_path,
+            render.line,
+            render.col,
+            0,
+            0,
+        )?;
+    }
+
     for import in &extracts.imports {
         db.insert_symbol(
             &import.imported_name,
@@ -219,6 +262,31 @@ fn reindex_file(
             0,
             0,
             0,
+        )?;
+        db.insert_import_ref(
+            &pending.file.rel_path,
+            &import.imported_name,
+            &import.source_module,
+            import.line,
+        )?;
+    }
+
+    for route in &extracts.routes {
+        let route_name = format!("{} {}", route.method, route.path);
+        let route_id = db.insert_symbol(
+            &route_name,
+            "route",
+            &pending.file.rel_path,
+            route.line,
+            route.col,
+            0,
+            0,
+        )?;
+        db.insert_route_ref(
+            route_id,
+            &route.handler_name,
+            &pending.file.rel_path,
+            route.line,
         )?;
     }
 

@@ -26,6 +26,14 @@ pub struct RawCall {
     pub col: u32,
 }
 
+/// A raw render/reference extracted from JSX/TSX.
+#[derive(Debug, Clone)]
+pub struct RawRender {
+    pub component_name: String,
+    pub line: u32,
+    pub col: u32,
+}
+
 /// A raw import extracted from a single file.
 #[derive(Debug, Clone)]
 pub struct RawImport {
@@ -34,14 +42,27 @@ pub struct RawImport {
     pub line: u32,
 }
 
+/// A raw route extracted from a single file (Express/Laravel/etc).
+#[derive(Debug, Clone)]
+pub struct RawRoute {
+    pub method: String,
+    pub path: String,
+    pub handler_name: String,
+    pub line: u32,
+    pub col: u32,
+}
+
 /// Result of extracting symbols, calls, and imports from a single file.
 #[derive(Debug, Default)]
 pub struct FileExtracts {
     pub symbols: Vec<RawSymbol>,
     pub calls: Vec<RawCall>,
+    pub renders: Vec<RawRender>,
     pub imports: Vec<RawImport>,
+    pub routes: Vec<RawRoute>,
 }
 
+#[derive(Default)]
 pub struct ExtractorPool {
     extractors: HashMap<Lang, LanguageExtractor>,
 }
@@ -50,14 +71,6 @@ struct LanguageExtractor {
     parser: tree_sitter::Parser,
     query: Query,
     capture_names: Vec<String>,
-}
-
-impl Default for ExtractorPool {
-    fn default() -> Self {
-        Self {
-            extractors: HashMap::new(),
-        }
-    }
 }
 
 impl ExtractorPool {
@@ -104,6 +117,12 @@ impl ExtractorPool {
                         line: start.row as u32 + 1,
                         col: start.column as u32,
                     });
+                } else if name == "render" {
+                    result.renders.push(RawRender {
+                        component_name: text,
+                        line: start.row as u32 + 1,
+                        col: start.column as u32,
+                    });
                 } else if name == "import.name" {
                     result.imports.push(RawImport {
                         imported_name: text,
@@ -117,11 +136,36 @@ impl ExtractorPool {
                             imp.source_module = text;
                         }
                     }
+                } else if name == "route.method" {
+                    result.routes.push(RawRoute {
+                        method: text.to_ascii_uppercase(),
+                        path: String::new(),
+                        handler_name: String::new(),
+                        line: start.row as u32 + 1,
+                        col: start.column as u32,
+                    });
+                } else if name == "route.path" {
+                    let text = text.trim_matches(|c| c == '\'' || c == '"').to_string();
+                    if let Some(route) = result.routes.last_mut() {
+                        if route.path.is_empty() && route.line == start.row as u32 + 1 {
+                            route.path = text;
+                        }
+                    }
+                } else if name == "route.handler" {
+                    if let Some(route) = result.routes.last_mut() {
+                        if route.handler_name.is_empty() && route.line == start.row as u32 + 1 {
+                            route.handler_name =
+                                text.trim_matches(|c| c == '\'' || c == '"').to_string();
+                        }
+                    }
                 }
             }
         }
 
         result.symbols = dedupe_symbols(result.symbols);
+        result
+            .routes
+            .retain(|r| !r.method.is_empty() && !r.path.is_empty() && !r.handler_name.is_empty());
         Ok(result)
     }
 }

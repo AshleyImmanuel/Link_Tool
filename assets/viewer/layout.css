@@ -1,0 +1,129 @@
+/* Bootstrap-like navbar layout */
+#header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  z-index: 10;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#header .container-fluid {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+}
+
+#toolbar.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+#legend.legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+#toolbar .group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#searchWrap {
+  position: relative;
+  min-width: 260px;
+  max-width: 520px;
+  width: 100%;
+}
+
+/* On smaller widths, let legend wrap and keep tools usable */
+@media (max-width: 980px) {
+  #legend.legend {
+    display: none;
+  }
+}
+
+#graph {
+  position: absolute;
+  top: 56px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+}
+
+#side {
+  position: absolute;
+  top: 68px;
+  right: 14px;
+  width: 360px;
+  max-width: calc(100vw - 28px);
+  z-index: 12;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#sideHeader {
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#sideBody {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+#sideEmpty {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#toast {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 50;
+  display: none;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 15, 18, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 12px;
+}
+

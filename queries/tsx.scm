@@ -1,5 +1,4 @@
-; TypeScript / TSX — symbol definitions, calls, and imports
-; Shares most patterns with JavaScript, plus type annotations
+; TSX â€” TypeScript symbols, calls, imports, and JSX component usage
 
 ; Function declarations
 (function_declaration
@@ -44,6 +43,15 @@
 (call_expression
   function: (member_expression
     property: (property_identifier) @call))
+
+; JSX component usage
+(jsx_opening_element
+  name: (identifier) @render
+  (#match? @render "^[A-Z]"))
+
+(jsx_self_closing_element
+  name: (identifier) @render
+  (#match? @render "^[A-Z]"))
 
 ; Import specifiers
 (import_statement

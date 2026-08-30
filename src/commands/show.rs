@@ -2,14 +2,16 @@ use anyhow::{Context, Result};
 
 use crate::db::Db;
 use crate::error::user_error;
+use crate::intel;
+use crate::ui;
 use crate::viewer;
 
-pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
+pub fn run(symbol_name: &str, preferred_file: Option<&str>, json: bool, quiet: bool) -> Result<()> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
     let link_dir = cwd.join(".link");
 
     if !link_dir.join("index.db").exists() {
-        return Err(user_error("not a Link project. Run 'link init' first."));
+        return Err(user_error("not a Link project. Run 'linkmap init' first."));
     }
 
     let db = Db::open_index(&link_dir)?;
@@ -18,7 +20,7 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
     // Filter to definitions only (not calls/imports)
     let defs: Vec<_> = symbols
         .iter()
-        .filter(|s| s.kind != "call" && s.kind != "import")
+        .filter(|s| intel::is_definition_kind(&s.kind))
         .collect();
 
     if defs.is_empty() {
@@ -26,7 +28,7 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
         let fuzzy = db.fuzzy_search(symbol_name)?;
         let fuzzy_defs: Vec<_> = fuzzy
             .iter()
-            .filter(|s| s.kind != "call" && s.kind != "import")
+            .filter(|s| intel::is_definition_kind(&s.kind))
             .take(10)
             .collect();
 
@@ -54,24 +56,44 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
                 s.line
             );
         }
-        // Use the first one
-        println!("Showing graph for [1].");
+        if let Some(file) = preferred_file {
+            println!("Trying preferred file: {}", file);
+        } else {
+            println!("Tip: pass --file <path> to pick the right definition.");
+        }
     }
 
-    let target = defs[0];
-    let graph = viewer::build_graph(&db, target)?;
+    let target = match preferred_file {
+        Some(file) => {
+            let normalized = file.replace('\\', "/");
+            match defs.iter().find(|s| s.file == normalized) {
+                Some(hit) => hit,
+                None => {
+                    return Err(user_error(format!(
+                        "no definition for '{}' found in file '{}'.",
+                        symbol_name, file
+                    )));
+                }
+            }
+        }
+        None => defs[0],
+    };
+    let graph = viewer::build_graph(&db, target, &cwd)?;
 
     if json {
         println!("{}", viewer::graph_to_json(&graph));
     } else {
         viewer::open_graph(&link_dir, &graph)?;
         if !quiet {
-            println!(
-                "Opened graph for '{}' ({}) - {} nodes, {} edges",
-                target.name,
-                target.kind,
-                graph.nodes.len(),
-                graph.edges.len()
+            ui::info(
+                quiet,
+                format!(
+                    "Opened graph for '{}' ({}) - {} nodes, {} edges",
+                    target.name,
+                    target.kind,
+                    graph.nodes.len(),
+                    graph.edges.len()
+                ),
             );
         }
     }

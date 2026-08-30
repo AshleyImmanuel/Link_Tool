@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0",
+  "description": "Git for understanding code. Fast, local, static code structure analysis.",
+  "homepage": "https://github.com/AshleyImmanuel/link_tool",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/AshleyImmanuel/link_tool/releases/download/v0.1.0/linkmap-0.1.0-windows-x86_64.zip",
+      "hash": "REPLACE_WITH_SHA256"
+    }
+  },
+  "bin": "linkmap.exe",
+  "checkver": {
+    "github": "https://github.com/AshleyImmanuel/link_tool"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/AshleyImmanuel/link_tool/releases/download/v$version/linkmap-$version-windows-x86_64.zip"
+      }
+    }
+  }
+}
+

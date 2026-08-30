@@ -8,6 +8,7 @@ pub enum Lang {
     Python,
     Go,
     Rust,
+    Php,
 }
 
 impl Lang {
@@ -19,6 +20,7 @@ impl Lang {
             "py" | "pyi" => Some(Lang::Python),
             "go" => Some(Lang::Go),
             "rs" => Some(Lang::Rust),
+            "php" => Some(Lang::Php),
             _ => None,
         }
     }
@@ -31,6 +33,7 @@ impl Lang {
             Lang::Python => "python",
             Lang::Go => "go",
             Lang::Rust => "rust",
+            Lang::Php => "php",
         }
     }
 
@@ -42,6 +45,7 @@ impl Lang {
             Lang::Python => tree_sitter_python::LANGUAGE.into(),
             Lang::Go => tree_sitter_go::LANGUAGE.into(),
             Lang::Rust => tree_sitter_rust::LANGUAGE.into(),
+            Lang::Php => tree_sitter_php::LANGUAGE_PHP.into(),
         }
     }
 }

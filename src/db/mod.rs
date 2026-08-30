@@ -1,76 +1,18 @@
+mod models;
+mod schema;
+
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::time::Duration;
 
 use crate::error::user_error;
+use schema::{DEFINITION_KIND_FILTER, INDEX_FORMAT_META_KEY, INDEX_FORMAT_VERSION, SCHEMA};
 
-const DEFINITION_KIND_FILTER: &str =
-    "'function','class','method','variable','struct','enum','type','interface','module'";
-const INDEX_FORMAT_META_KEY: &str = "index_format_version";
-const INDEX_FORMAT_VERSION: &str = "2";
-
-const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS symbols (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    file TEXT NOT NULL,
-    line INTEGER NOT NULL,
-    col INTEGER NOT NULL,
-    byte_start INTEGER NOT NULL,
-    byte_end INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS edges (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_id INTEGER NOT NULL,
-    to_id INTEGER NOT NULL,
-    relation TEXT NOT NULL,
-    FOREIGN KEY (from_id) REFERENCES symbols(id),
-    FOREIGN KEY (to_id) REFERENCES symbols(id)
-);
-
-CREATE TABLE IF NOT EXISTS files (
-    path TEXT PRIMARY KEY,
-    hash TEXT NOT NULL,
-    lang TEXT NOT NULL,
-    last_modified INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
-CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind);
-CREATE INDEX IF NOT EXISTS idx_symbols_name_kind ON symbols(name, kind);
-CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file);
-CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_id);
-CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_unique ON edges(from_id, to_id, relation);
-";
+pub use models::{CommandHistoryEntry, Edge, ImportRef, RouteRef, Symbol};
 
 pub struct Db {
     conn: Connection,
-}
-
-#[derive(Debug, Clone)]
-pub struct Symbol {
-    pub id: i64,
-    pub name: String,
-    pub kind: String,
-    pub file: String,
-    pub line: u32,
-    pub col: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct Edge {
-    pub from_id: i64,
-    pub to_id: i64,
-    pub relation: String,
 }
 
 impl Db {
@@ -138,6 +80,7 @@ impl Db {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_symbol(
         &self,
         name: &str,
@@ -155,10 +98,48 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn insert_edge(&self, from_id: i64, to_id: i64, relation: &str) -> Result<()> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_edge(
+        &self,
+        from_id: i64,
+        to_id: i64,
+        relation: &str,
+        reason: &str,
+        origin_file: &str,
+        origin_line: u32,
+        confidence: f32,
+    ) -> Result<()> {
         self.conn.execute(
-            "INSERT OR IGNORE INTO edges (from_id, to_id, relation) VALUES (?1, ?2, ?3)",
-            params![from_id, to_id, relation],
+            "INSERT OR IGNORE INTO edges (from_id, to_id, relation, reason, origin_file, origin_line, confidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![from_id, to_id, relation, reason, origin_file, origin_line, confidence],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_import_ref(
+        &self,
+        file: &str,
+        imported_name: &str,
+        source_module: &str,
+        line: u32,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO import_refs (file, imported_name, source_module, line) VALUES (?1, ?2, ?3, ?4)",
+            params![file, imported_name, source_module, line],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_route_ref(
+        &self,
+        route_id: i64,
+        handler_name: &str,
+        origin_file: &str,
+        origin_line: u32,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO route_refs (route_id, handler_name, origin_file, origin_line) VALUES (?1, ?2, ?3, ?4)",
+            params![route_id, handler_name, origin_file, origin_line],
         )?;
         Ok(())
     }
@@ -200,8 +181,73 @@ impl Db {
         self.set_meta(INDEX_FORMAT_META_KEY, INDEX_FORMAT_VERSION)
     }
 
+    pub fn insert_command_history(
+        &self,
+        ts: u64,
+        session_key: &str,
+        cwd: &str,
+        command: &str,
+        success: bool,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO command_history (ts, session_key, cwd, command, success) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![ts, session_key, cwd, command, success as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn command_history(
+        &self,
+        session_key: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<CommandHistoryEntry>> {
+        let mut results = Vec::new();
+
+        if let Some(session_key) = session_key {
+            let mut stmt = self.conn.prepare(
+                "SELECT ts, session_key, command, success
+                 FROM command_history
+                 WHERE session_key = ?1
+                 ORDER BY id DESC
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![session_key, limit as i64], |row| {
+                Ok(CommandHistoryEntry {
+                    ts: row.get(0)?,
+                    session_key: row.get(1)?,
+                    command: row.get(2)?,
+                    success: row.get::<_, i64>(3)? != 0,
+                })
+            })?;
+            for row in rows {
+                results.push(row?);
+            }
+        } else {
+            let mut stmt = self.conn.prepare(
+                "SELECT ts, session_key, command, success
+                 FROM command_history
+                 ORDER BY id DESC
+                 LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![limit as i64], |row| {
+                Ok(CommandHistoryEntry {
+                    ts: row.get(0)?,
+                    session_key: row.get(1)?,
+                    command: row.get(2)?,
+                    success: row.get::<_, i64>(3)? != 0,
+                })
+            })?;
+            for row in rows {
+                results.push(row?);
+            }
+        }
+
+        Ok(results)
+    }
+
     pub fn delete_symbols_for_file(&self, file: &str) -> Result<()> {
-        // Delete edges referencing symbols from this file
+        self.delete_import_refs_for_file(file)?;
+        self.delete_route_refs_for_file(file)?;
         self.conn.execute(
             "DELETE FROM edges WHERE from_id IN (SELECT id FROM symbols WHERE file = ?1) OR to_id IN (SELECT id FROM symbols WHERE file = ?1)",
             params![file],
@@ -237,6 +283,15 @@ impl Db {
             paths.push(r?);
         }
         Ok(paths)
+    }
+
+    pub fn all_edges(&self) -> Result<Vec<Edge>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT from_id, to_id, relation, reason, origin_file, origin_line, confidence \
+             FROM edges ORDER BY from_id, to_id, relation",
+        )?;
+        let rows = stmt.query_map([], map_edge)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn find_symbols_by_name(&self, name: &str) -> Result<Vec<Symbol>> {
@@ -287,13 +342,45 @@ impl Db {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    pub fn all_import_refs(&self) -> Result<Vec<ImportRef>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT file, imported_name, source_module, line \
+             FROM import_refs ORDER BY file, line, imported_name",
+        )?;
+        let rows = stmt.query_map([], map_import_ref)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn import_refs_for_file(&self, file: &str) -> Result<Vec<ImportRef>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT file, imported_name, source_module, line \
+             FROM import_refs WHERE file = ?1 ORDER BY line, imported_name",
+        )?;
+        let rows = stmt.query_map(params![file], map_import_ref)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn all_route_refs(&self) -> Result<Vec<RouteRef>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT route_id, handler_name, origin_file, origin_line \
+             FROM route_refs ORDER BY route_id, origin_line",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(RouteRef {
+                route_id: row.get(0)?,
+                handler_name: row.get(1)?,
+                origin_file: row.get(2)?,
+                origin_line: row.get::<_, i64>(3)? as u32,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn edges_for_symbol(&self, symbol_id: i64) -> Result<Vec<(Edge, Symbol)>> {
-        // Get edges where this symbol is source or target, plus the other symbol
         let mut results = Vec::new();
 
-        // Outgoing edges (this symbol calls/uses others)
         let mut stmt = self.conn.prepare(
-            "SELECT e.from_id, e.to_id, e.relation, s.id, s.name, s.kind, s.file, s.line, s.col \
+            "SELECT e.from_id, e.to_id, e.relation, e.reason, e.origin_file, e.origin_line, e.confidence, s.id, s.name, s.kind, s.file, s.line, s.col \
              FROM edges e JOIN symbols s ON e.to_id = s.id WHERE e.from_id = ?1",
         )?;
         let rows = stmt.query_map(params![symbol_id], |row| {
@@ -302,14 +389,18 @@ impl Db {
                     from_id: row.get(0)?,
                     to_id: row.get(1)?,
                     relation: row.get(2)?,
+                    reason: row.get(3)?,
+                    origin_file: row.get(4)?,
+                    origin_line: row.get(5)?,
+                    confidence: row.get(6)?,
                 },
                 Symbol {
-                    id: row.get(3)?,
-                    name: row.get(4)?,
-                    kind: row.get(5)?,
-                    file: row.get(6)?,
-                    line: row.get(7)?,
-                    col: row.get(8)?,
+                    id: row.get(7)?,
+                    name: row.get(8)?,
+                    kind: row.get(9)?,
+                    file: row.get(10)?,
+                    line: row.get(11)?,
+                    col: row.get(12)?,
                 },
             ))
         })?;
@@ -317,9 +408,8 @@ impl Db {
             results.push(r?);
         }
 
-        // Incoming edges (others call/use this symbol)
         let mut stmt = self.conn.prepare(
-            "SELECT e.from_id, e.to_id, e.relation, s.id, s.name, s.kind, s.file, s.line, s.col \
+            "SELECT e.from_id, e.to_id, e.relation, e.reason, e.origin_file, e.origin_line, e.confidence, s.id, s.name, s.kind, s.file, s.line, s.col \
              FROM edges e JOIN symbols s ON e.from_id = s.id WHERE e.to_id = ?1",
         )?;
         let rows = stmt.query_map(params![symbol_id], |row| {
@@ -328,14 +418,18 @@ impl Db {
                     from_id: row.get(0)?,
                     to_id: row.get(1)?,
                     relation: row.get(2)?,
+                    reason: row.get(3)?,
+                    origin_file: row.get(4)?,
+                    origin_line: row.get(5)?,
+                    confidence: row.get(6)?,
                 },
                 Symbol {
-                    id: row.get(3)?,
-                    name: row.get(4)?,
-                    kind: row.get(5)?,
-                    file: row.get(6)?,
-                    line: row.get(7)?,
-                    col: row.get(8)?,
+                    id: row.get(7)?,
+                    name: row.get(8)?,
+                    kind: row.get(9)?,
+                    file: row.get(10)?,
+                    line: row.get(11)?,
+                    col: row.get(12)?,
                 },
             ))
         })?;
@@ -371,11 +465,14 @@ impl Db {
 
     pub fn reset_index(&self) -> Result<()> {
         self.conn.execute_batch(
-            "DELETE FROM edges; \
-             DELETE FROM symbols; \
-             DELETE FROM files; \
-             DELETE FROM meta;",
+            "DROP TABLE IF EXISTS edges; \
+             DROP TABLE IF EXISTS symbols; \
+             DROP TABLE IF EXISTS files; \
+             DROP TABLE IF EXISTS meta; \
+             DROP TABLE IF EXISTS import_refs; \
+             DROP TABLE IF EXISTS route_refs;",
         )?;
+        self.conn.execute_batch(SCHEMA)?;
         Ok(())
     }
 
@@ -383,13 +480,27 @@ impl Db {
         match self.get_meta(INDEX_FORMAT_META_KEY)? {
             Some(version) if version == INDEX_FORMAT_VERSION => Ok(()),
             Some(version) => Err(user_error(format!(
-                "index format {} is not supported by this build. Run 'link init' to rebuild the index.",
+                "index format {} is not supported by this build. Run 'linkmap init' to rebuild the index.",
                 version
             ))),
             None => Err(user_error(
-                "index format is missing or out of date. Run 'link init' to rebuild the index.",
+                "index format is missing or out of date. Run 'linkmap init' to rebuild the index.",
             )),
         }
+    }
+
+    fn delete_import_refs_for_file(&self, file: &str) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM import_refs WHERE file = ?1", params![file])?;
+        Ok(())
+    }
+
+    fn delete_route_refs_for_file(&self, file: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM route_refs WHERE origin_file = ?1 OR route_id IN (SELECT id FROM symbols WHERE file = ?1)",
+            params![file],
+        )?;
+        Ok(())
     }
 }
 
@@ -440,5 +551,26 @@ fn map_symbol(row: &rusqlite::Row) -> rusqlite::Result<Symbol> {
         file: row.get(3)?,
         line: row.get(4)?,
         col: row.get(5)?,
+    })
+}
+
+fn map_edge(row: &rusqlite::Row) -> rusqlite::Result<Edge> {
+    Ok(Edge {
+        from_id: row.get(0)?,
+        to_id: row.get(1)?,
+        relation: row.get(2)?,
+        reason: row.get(3)?,
+        origin_file: row.get(4)?,
+        origin_line: row.get(5)?,
+        confidence: row.get(6)?,
+    })
+}
+
+fn map_import_ref(row: &rusqlite::Row) -> rusqlite::Result<ImportRef> {
+    Ok(ImportRef {
+        file: row.get(0)?,
+        imported_name: row.get(1)?,
+        source_module: row.get(2)?,
+        line: row.get(3)?,
     })
 }
