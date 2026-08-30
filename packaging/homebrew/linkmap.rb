@@ -2,19 +2,19 @@ class Linkmap < Formula
   desc "Git for understanding code. Fast, local, static code structure analysis."
   homepage "https://github.com/AshleyImmanuel/Link_Tool"
   license "MIT"
-  version "0.1.1"
+  version "0.1.2"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.1/linkmap-0.1.1-macos-x86_64.tar.gz"
-      sha256 "c05627cc34df4b48f6eb8984eae5f9da39cad7fb0bac1f799c91bda0d9267db7"
+      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.2/linkmap-0.1.2-macos-x86_64.tar.gz"
+      sha256 "dcf64b178a25c33c840675da5bdf42b211373b6d7b445cd0882a471344b99826"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.1/linkmap-0.1.1-linux-x86_64.tar.gz"
-      sha256 "085f29a46431ef2363cf6be66586d17d9d7a2ba3b0e33311a34cdc8026577b85"
+      url "https://github.com/AshleyImmanuel/Link_Tool/releases/download/v0.1.2/linkmap-0.1.2-linux-x86_64.tar.gz"
+      sha256 "254628a89c61ee789c492e99dbf1f888be9a52d6b1003e5e39d16f3f9a01bad7"
     end
   end
 
