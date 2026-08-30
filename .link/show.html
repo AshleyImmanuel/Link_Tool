@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Link — run</title>
+<title>Link — build_graph</title>
 <script>/**
  * vis-network
  * https://visjs.github.io/vis-network/
@@ -54,7 +54,7 @@ function zu(){return zu=Object.assign||function(g){for(var t=1;t<arguments.lengt
 </head>
 <body>
 <div id="header">
-  <h1>🔗 Link — <span>run</span></h1>
+  <h1>🔗 Link — <span>build_graph</span></h1>
   <div id="legend">
     <div class="legend-item"><div class="legend-dot" style="background:#4a9eff"></div>function</div>
     <div class="legend-item"><div class="legend-dot" style="background:#b266ff"></div>class</div>
@@ -67,8 +67,8 @@ function zu(){return zu=Object.assign||function(g){for(var t=1;t<arguments.lengt
 <div id="graph"></div>
 <div id="tooltip"></div>
 <script>
-var nodes = new vis.DataSet([{id:48,label:"run (explain.rs:5)",color:{background:"#4a9eff",border:"#FFD700"},borderWidth:3,font:{color:"#e0e0e0",size:12},shape:"box",file:"src/commands/explain.rs",line:5,col:7}]);
-var edges = new vis.DataSet([]);
+var nodes = new vis.DataSet([{id:838,label:"build_graph (viewer.rs:33)",color:{background:"#4a9eff",border:"#FFD700"},borderWidth:3,font:{color:"#e0e0e0",size:12},shape:"box",file:"src/viewer.rs",line:33,col:7},{id:305,label:"build_graph (show.rs:54)",color:{background:"#ff6b6b",border:"#ff6b6b"},borderWidth:1,font:{color:"#e0e0e0",size:12},shape:"box",file:"src/commands/show.rs",line:54,col:24}]);
+var edges = new vis.DataSet([{from:305,to:838,label:"calls",arrows:"to",color:{color:"#666",highlight:"#aaa"},font:{color:"#999",size:10}}]);
 var container = document.getElementById('graph');
 var data = { nodes: nodes, edges: edges };
 var options = {
@@ -78,7 +78,7 @@ var options = {
   edges: { smooth: { type: 'cubicBezier' } }
 };
 var network = new vis.Network(container, data, options);
-network.focus(48, { scale: 1.0, animation: true });
+network.focus(838, { scale: 1.0, animation: true });
 network.on('click', function(params) {
   if (params.nodes.length > 0) {
     var node = nodes.get(params.nodes[0]);

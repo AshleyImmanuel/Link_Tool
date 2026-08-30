@@ -257,14 +257,14 @@ pub fn open_graph(link_dir: &Path, data: &GraphData) -> Result<()> {
 
 fn kind_color(kind: &str) -> &'static str {
     match kind {
-        "function" => "#4a9eff",
-        "class" => "#b266ff",
-        "method" => "#4dd0b8",
-        "variable" => "#ff9f43",
-        "call" => "#ff6b6b",
-        "import" => "#82aaff",
-        "struct" | "enum" | "type" | "interface" => "#c792ea",
-        _ => "#666666",
+        "function" => "#3b6ea5",
+        "class" => "#825ab4",
+        "method" => "#3b8c7c",
+        "variable" => "#b46e32",
+        "call" => "#a54b4b",
+        "import" => "#5c7aa5",
+        "struct" | "enum" | "type" | "interface" => "#8f6b9e",
+        _ => "#555555",
     }
 }
 
