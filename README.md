@@ -58,6 +58,12 @@ curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/insta
 
 This installs `linkmap` to `~/.local/bin/linkmap`.
 
+### Install via PowerShell (Windows)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/install.ps1 | iex"
+```
+
 ### Install via package managers (Git-style)
 
 Linkmap is easiest to install via a package manager once you publish a release.
@@ -74,9 +80,7 @@ scoop install linkmap
 - macOS/Linux (Homebrew):
 
 ```bash
-# after you publish a Homebrew tap repo:
-brew tap ashleyimmanuel/linkmap
-brew install linkmap
+brew install --formula https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/packaging/homebrew/linkmap.rb
 ```
 
 ### Install from source (Cargo)
