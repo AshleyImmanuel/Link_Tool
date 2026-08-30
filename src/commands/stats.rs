@@ -1,7 +1,7 @@
-use anyhow::{bail, Context, Result};
-use std::path::Path;
+use anyhow::{Context, Result};
 
 use crate::db::Db;
+use crate::error::user_error;
 
 pub fn run() -> Result<()> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
@@ -9,26 +9,26 @@ pub fn run() -> Result<()> {
     let db_path = link_dir.join("index.db");
 
     if !db_path.exists() {
-        bail!("not a Link project. Run 'link init' first.");
+        return Err(user_error("not a Link project. Run 'link init' first."));
     }
 
-    let db = Db::open(&link_dir)?;
+    let db = Db::open_index(&link_dir)?;
 
     let files = db.file_count()?;
     let symbols = db.symbol_count()?;
     let edges = db.edge_count()?;
     let last_scan = db.get_meta("last_scan")?;
     let db_size = std::fs::metadata(&db_path)
-        .map(|m| m.len())
+        .map(|metadata| metadata.len())
         .unwrap_or(0);
 
-    println!("📊 Link Index Stats");
+    println!("Link Index Stats");
     println!("  Files:   {}", files);
     println!("  Symbols: {}", symbols);
     println!("  Edges:   {}", edges);
 
-    if let Some(ts) = last_scan {
-        if let Ok(epoch) = ts.parse::<u64>() {
+    if let Some(timestamp) = last_scan {
+        if let Ok(epoch) = timestamp.parse::<u64>() {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()

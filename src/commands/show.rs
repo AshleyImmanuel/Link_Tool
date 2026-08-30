@@ -1,6 +1,7 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::db::Db;
+use crate::error::user_error;
 use crate::viewer;
 
 pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
@@ -8,10 +9,10 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
     let link_dir = cwd.join(".link");
 
     if !link_dir.join("index.db").exists() {
-        bail!("not a Link project. Run 'link init' first.");
+        return Err(user_error("not a Link project. Run 'link init' first."));
     }
 
-    let db = Db::open(&link_dir)?;
+    let db = Db::open_index(&link_dir)?;
     let symbols = db.find_symbols_by_name(symbol_name)?;
 
     // Filter to definitions only (not calls/imports)
@@ -30,7 +31,7 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
             .collect();
 
         if fuzzy_defs.is_empty() {
-            bail!("symbol '{}' not found.", symbol_name);
+            return Err(user_error(format!("symbol '{}' not found.", symbol_name)));
         }
 
         println!("No exact match for '{}'. Did you mean:", symbol_name);
@@ -44,7 +45,14 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
     if defs.len() > 1 && !json {
         println!("Multiple definitions for '{}':", symbol_name);
         for (i, s) in defs.iter().enumerate() {
-            println!("  [{}] {} ({}) {}:{}", i + 1, s.name, s.kind, s.file, s.line);
+            println!(
+                "  [{}] {} ({}) {}:{}",
+                i + 1,
+                s.name,
+                s.kind,
+                s.file,
+                s.line
+            );
         }
         // Use the first one
         println!("Showing graph for [1].");
@@ -59,7 +67,7 @@ pub fn run(symbol_name: &str, json: bool, quiet: bool) -> Result<()> {
         viewer::open_graph(&link_dir, &graph)?;
         if !quiet {
             println!(
-                "Opened graph for '{}' ({}) — {} nodes, {} edges",
+                "Opened graph for '{}' ({}) - {} nodes, {} edges",
                 target.name,
                 target.kind,
                 graph.nodes.len(),

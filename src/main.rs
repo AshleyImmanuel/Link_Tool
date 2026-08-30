@@ -1,13 +1,16 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::process::ExitCode;
 
 mod commands;
 mod db;
+mod error;
 mod extractor;
 mod hasher;
 mod lang;
 mod parser;
 mod resolver;
+mod scan;
 mod viewer;
 
 #[derive(Parser)]
@@ -65,12 +68,26 @@ enum Commands {
     },
 }
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{}", error::format_error(&err));
+            ExitCode::from(error::exit_code(&err))
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Init { quiet } => commands::init::run(quiet),
-        Commands::Show { symbol, json, quiet } => commands::show::run(&symbol, json, quiet),
+        Commands::Show {
+            symbol,
+            json,
+            quiet,
+        } => commands::show::run(&symbol, json, quiet),
         Commands::List { quiet } => commands::list::run(quiet),
         Commands::Search { query, quiet } => commands::search::run(&query, quiet),
         Commands::Update { quiet } => commands::update::run(quiet),

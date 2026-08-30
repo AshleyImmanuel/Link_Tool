@@ -1,16 +1,17 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::db::Db;
+use crate::error::user_error;
 
 pub fn run(quiet: bool) -> Result<()> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
     let link_dir = cwd.join(".link");
 
     if !link_dir.join("index.db").exists() {
-        bail!("not a Link project. Run 'link init' first.");
+        return Err(user_error("not a Link project. Run 'link init' first."));
     }
 
-    let db = Db::open(&link_dir)?;
+    let db = Db::open_index(&link_dir)?;
     let symbols = db.list_all_symbols()?;
 
     if symbols.is_empty() {

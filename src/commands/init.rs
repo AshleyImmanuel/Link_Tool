@@ -1,14 +1,12 @@
-use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use walkdir::WalkDir;
 
 use crate::db::Db;
-use crate::extractor;
+use crate::extractor::ExtractorPool;
 use crate::hasher;
-use crate::lang;
 use crate::resolver;
+use crate::scan;
 
 pub fn run(quiet: bool) -> Result<()> {
     let start = Instant::now();
@@ -16,121 +14,68 @@ pub fn run(quiet: bool) -> Result<()> {
     let link_dir = cwd.join(".link");
 
     let db = Db::open(&link_dir)?;
-
-    // Collect files
-    let mut files: Vec<(PathBuf, lang::Lang)> = Vec::new();
-    for entry in WalkDir::new(&cwd)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_str().unwrap_or("");
-                !lang::should_skip_dir(name)
-            } else {
-                true
-            }
-        })
-    {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(err) => {
-                if !quiet {
-                    eprintln!("warning: {}", err);
-                }
-                continue;
-            }
-        };
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.into_path();
-        if let Some(l) = lang::detect_lang(&path) {
-            if lang::is_too_large(&path) {
-                if !quiet {
-                    eprintln!("warning: skipping large file: {}", path.display());
-                }
-                continue;
-            }
-            files.push((path, l));
-        }
-    }
+    let files = scan::collect_source_files(&cwd, quiet)?;
 
     if files.is_empty() {
-        println!("No supported files found.");
+        db.with_transaction(|db| {
+            db.reset_index()?;
+            db.write_index_metadata()?;
+            db.set_meta("last_scan", &chrono_now())?;
+            Ok(())
+        })?;
+        if !quiet {
+            println!("No supported files found.");
+        }
         return Ok(());
     }
+    let mut extractor = ExtractorPool::default();
+    let (indexed_files, total_symbols, resolve_stats) = db.with_transaction(|db| {
+        db.reset_index()?;
 
-    if !quiet && files.len() > 10_000 {
-        eprintln!("warning: {} files found, this may take a while...", files.len());
-    }
+        let mut indexed_files = 0usize;
+        let mut total_symbols = 0u64;
 
-    // Parse and extract
-    let mut total_symbols = 0u64;
-    for (path, l) in &files {
-        let rel = path
-            .strip_prefix(&cwd)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .replace('\\', "/");
+        for file in &files {
+            let source = match std::fs::read(&file.abs_path) {
+                Ok(source) => source,
+                Err(err) => {
+                    if !quiet {
+                        eprintln!("warning: failed to read file {}: {err}", file.rel_path);
+                    }
+                    continue;
+                }
+            };
 
-        let source = match std::fs::read(path) {
-            Ok(s) => s,
-            Err(err) => {
+            if std::str::from_utf8(&source).is_err() {
                 if !quiet {
-                    eprintln!("warning: cannot read {}: {}", rel, err);
+                    eprintln!("warning: skipping non-UTF8 file {}", file.rel_path);
                 }
                 continue;
             }
-        };
 
-        // Check UTF-8
-        if std::str::from_utf8(&source).is_err() {
-            if !quiet {
-                eprintln!("warning: skipping non-UTF8 file: {}", rel);
-            }
-            continue;
-        }
-
-        let hash = hasher::hash_bytes(&source);
-        let modified = path
-            .metadata()
-            .and_then(|m| m.modified())
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64)
-            .unwrap_or(0);
-
-        // Extract symbols
-        let extracts = match extractor::extract(&source, *l) {
-            Ok(e) => e,
-            Err(err) => {
-                if !quiet {
-                    eprintln!("warning: parse error in {}: {}", rel, err);
+            let extracts = match extractor.extract(&source, file.lang) {
+                Ok(extracts) => extracts,
+                Err(err) => {
+                    if !quiet {
+                        eprintln!("warning: failed to parse file {}: {err}", file.rel_path);
+                    }
+                    continue;
                 }
-                continue;
-            }
-        };
+            };
 
-        // Insert symbols
-        for sym in &extracts.symbols {
-            db.insert_symbol(&sym.name, &sym.kind, &rel, sym.line, sym.col, sym.byte_start, sym.byte_end)?;
-            total_symbols += 1;
+            let hash = hasher::hash_bytes(&source);
+            insert_extracts(db, file, &extracts, &hash)?;
+            indexed_files += 1;
+            total_symbols +=
+                (extracts.symbols.len() + extracts.calls.len() + extracts.imports.len()) as u64;
         }
 
-        // Insert calls as "call" kind symbols (for resolver)
-        for call in &extracts.calls {
-            db.insert_symbol(&call.callee_name, "call", &rel, call.line, call.col, 0, 0)?;
-            total_symbols += 1;
-        }
-
-        // Insert imports as "import" kind symbols
-        for imp in &extracts.imports {
-            db.insert_symbol(&imp.imported_name, "import", &rel, imp.line, 0, 0, 0)?;
-        }
-
-        db.upsert_file(&rel, &hash, l.name(), modified)?;
-    }
-
-    // Resolve cross-file edges
-    let resolve_stats = resolver::resolve(&db)?;
+        db.clear_edges()?;
+        let resolve_stats = resolver::resolve(db)?;
+        db.write_index_metadata()?;
+        db.set_meta("last_scan", &chrono_now())?;
+        Ok((indexed_files, total_symbols, resolve_stats))
+    })?;
 
     let elapsed = start.elapsed();
     let edge_count = db.edge_count()?;
@@ -138,7 +83,7 @@ pub fn run(quiet: bool) -> Result<()> {
     if !quiet {
         println!(
             "Initialized .link/index.db\n  {} files | {} symbols | {} edges | {:.1}s\n  ({} calls resolved, {} ambiguous, {} imports linked)",
-            files.len(),
+            indexed_files,
             total_symbols,
             edge_count,
             elapsed.as_secs_f64(),
@@ -148,7 +93,52 @@ pub fn run(quiet: bool) -> Result<()> {
         );
     }
 
-    db.set_meta("last_scan", &chrono_now())?;
+    Ok(())
+}
+
+fn insert_extracts(
+    db: &Db,
+    file: &scan::SourceFile,
+    extracts: &crate::extractor::FileExtracts,
+    hash: &str,
+) -> Result<()> {
+    for symbol in &extracts.symbols {
+        db.insert_symbol(
+            &symbol.name,
+            &symbol.kind,
+            &file.rel_path,
+            symbol.line,
+            symbol.col,
+            symbol.byte_start,
+            symbol.byte_end,
+        )?;
+    }
+
+    for call in &extracts.calls {
+        db.insert_symbol(
+            &call.callee_name,
+            "call",
+            &file.rel_path,
+            call.line,
+            call.col,
+            0,
+            0,
+        )?;
+    }
+
+    for import in &extracts.imports {
+        db.insert_symbol(
+            &import.imported_name,
+            "import",
+            &file.rel_path,
+            import.line,
+            0,
+            0,
+            0,
+        )?;
+    }
+
+    db.upsert_file(&file.rel_path, hash, file.lang.name(), file.last_modified)?;
     Ok(())
 }
 

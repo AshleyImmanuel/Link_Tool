@@ -1,4 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use streaming_iterator::StreamingIterator;
 use tree_sitter::Query;
 
@@ -40,74 +42,144 @@ pub struct FileExtracts {
     pub imports: Vec<RawImport>,
 }
 
-/// Extract all symbols, calls, and imports from source code.
-pub fn extract(source: &[u8], lang: Lang) -> Result<FileExtracts> {
-    let tree = parser::parse(source, lang)?;
-    let query_src = parser::query_str(lang);
-    let query = Query::new(&lang.ts_language(), query_src)?;
+pub struct ExtractorPool {
+    extractors: HashMap<Lang, LanguageExtractor>,
+}
 
-    let mut cursor = tree_sitter::QueryCursor::new();
-    let mut matches = cursor.matches(&query, tree.root_node(), source);
+struct LanguageExtractor {
+    parser: tree_sitter::Parser,
+    query: Query,
+    capture_names: Vec<String>,
+}
 
-    let mut result = FileExtracts::default();
+impl Default for ExtractorPool {
+    fn default() -> Self {
+        Self {
+            extractors: HashMap::new(),
+        }
+    }
+}
 
-    // Get capture names
-    let capture_names: Vec<String> = query.capture_names().iter().map(|s| s.to_string()).collect();
+impl ExtractorPool {
+    /// Extract all symbols, calls, and imports from source code.
+    pub fn extract(&mut self, source: &[u8], lang: Lang) -> Result<FileExtracts> {
+        let extractor = match self.extractors.entry(lang) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(LanguageExtractor::new(lang)?),
+        };
 
-    // StreamingIterator: call advance() then get()
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            let idx = capture.index as usize;
-            let name = if idx < capture_names.len() {
-                &capture_names[idx]
-            } else {
-                continue;
-            };
-            let node = capture.node;
-            let start = node.start_position();
-            let text = node_text(source, node);
+        let tree = parser::parse_with(&mut extractor.parser, source, lang)
+            .with_context(|| format!("failed to parse as {}", lang.name()))?;
 
-            if text.is_empty() {
-                continue;
-            }
+        let mut cursor = tree_sitter::QueryCursor::new();
+        let mut matches = cursor.matches(&extractor.query, tree.root_node(), source);
+        let mut result = FileExtracts::default();
 
-            if name.starts_with("definition.") {
-                let kind = name.strip_prefix("definition.").unwrap_or("unknown");
-                result.symbols.push(RawSymbol {
-                    name: text,
-                    kind: kind.to_string(),
-                    line: start.row as u32 + 1,
-                    col: start.column as u32,
-                    byte_start: node.start_byte() as u32,
-                    byte_end: node.end_byte() as u32,
-                });
-            } else if name == "call" {
-                result.calls.push(RawCall {
-                    callee_name: text,
-                    line: start.row as u32 + 1,
-                    col: start.column as u32,
-                });
-            } else if name == "import.name" {
-                result.imports.push(RawImport {
-                    imported_name: text,
-                    source_module: String::new(),
-                    line: start.row as u32 + 1,
-                });
-            } else if name == "import.source" {
-                let text = text.trim_matches(|c| c == '\'' || c == '"').to_string();
-                if let Some(imp) = result.imports.last_mut() {
-                    if imp.source_module.is_empty() && imp.line == start.row as u32 + 1 {
-                        imp.source_module = text;
+        while let Some(m) = matches.next() {
+            for capture in m.captures {
+                let idx = capture.index as usize;
+                let Some(name) = extractor.capture_names.get(idx) else {
+                    continue;
+                };
+                let node = capture.node;
+                let start = node.start_position();
+                let text = node_text(source, node);
+
+                if text.is_empty() {
+                    continue;
+                }
+
+                if let Some(kind) = name.strip_prefix("definition.") {
+                    result.symbols.push(RawSymbol {
+                        name: text,
+                        kind: kind.to_string(),
+                        line: start.row as u32 + 1,
+                        col: start.column as u32,
+                        byte_start: node.start_byte() as u32,
+                        byte_end: node.end_byte() as u32,
+                    });
+                } else if name == "call" {
+                    result.calls.push(RawCall {
+                        callee_name: text,
+                        line: start.row as u32 + 1,
+                        col: start.column as u32,
+                    });
+                } else if name == "import.name" {
+                    result.imports.push(RawImport {
+                        imported_name: text,
+                        source_module: String::new(),
+                        line: start.row as u32 + 1,
+                    });
+                } else if name == "import.source" {
+                    let text = text.trim_matches(|c| c == '\'' || c == '"').to_string();
+                    if let Some(imp) = result.imports.last_mut() {
+                        if imp.source_module.is_empty() && imp.line == start.row as u32 + 1 {
+                            imp.source_module = text;
+                        }
                     }
                 }
             }
         }
-    }
 
-    Ok(result)
+        result.symbols = dedupe_symbols(result.symbols);
+        Ok(result)
+    }
+}
+
+impl LanguageExtractor {
+    fn new(lang: Lang) -> Result<Self> {
+        let parser = parser::new_parser(lang)?;
+        let query_src = parser::query_str(lang);
+        let query = Query::new(&lang.ts_language(), query_src)
+            .with_context(|| format!("failed to load tree-sitter query for {}", lang.name()))?;
+        let capture_names = query
+            .capture_names()
+            .iter()
+            .map(|capture| capture.to_string())
+            .collect();
+
+        Ok(Self {
+            parser,
+            query,
+            capture_names,
+        })
+    }
 }
 
 fn node_text(source: &[u8], node: tree_sitter::Node) -> String {
     let bytes = &source[node.start_byte()..node.end_byte()];
     String::from_utf8_lossy(bytes).to_string()
+}
+
+fn dedupe_symbols(symbols: Vec<RawSymbol>) -> Vec<RawSymbol> {
+    let function_sites: HashSet<(String, u32, u32, u32, u32)> = symbols
+        .iter()
+        .filter(|symbol| symbol.kind == "function")
+        .map(|symbol| {
+            (
+                symbol.name.clone(),
+                symbol.line,
+                symbol.col,
+                symbol.byte_start,
+                symbol.byte_end,
+            )
+        })
+        .collect();
+
+    symbols
+        .into_iter()
+        .filter(|symbol| {
+            if symbol.kind != "variable" {
+                return true;
+            }
+
+            !function_sites.contains(&(
+                symbol.name.clone(),
+                symbol.line,
+                symbol.col,
+                symbol.byte_start,
+                symbol.byte_end,
+            ))
+        })
+        .collect()
 }

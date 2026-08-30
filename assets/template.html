@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Link - {{center_name}}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f0f11; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; height: 100vh; overflow: hidden; }
+  #header {
+    position: absolute; top: 0; left: 0; right: 0; height: 56px; z-index: 10;
+    background: rgba(15, 15, 17, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+  }
+  #header h1 { font-size: 15px; font-weight: 500; letter-spacing: 0.5px; }
+  #header h1 strong { color: #ffffff; font-weight: 700; }
+  #header h1 span { color: #38bdf8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  #legend { display: flex; gap: 16px; font-size: 12px; font-weight: 500; color: #94a3b8; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  #graph { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 1; }
+  #tooltip {
+    position: absolute; display: none; z-index: 100; pointer-events: none;
+    background: rgba(30,30,36,0.95); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+    padding: 10px 14px; color: #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+  #tooltip b { color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; display: block; margin-bottom: 4px; }
+  #tooltip span { font-size: 12px; color: #94a3b8; }
+</style>
+</head>
+<body data-center-id="{{center_id}}">
+<div id="header">
+  <h1><strong>Link</strong> <span style="color:#666">/</span> <span>{{center_name}}</span></h1>
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#61afef"></div>function</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#c678dd"></div>class/struct</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#56b6c2"></div>method</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d19a66"></div>variable</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e06c75"></div>call</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#abb2bf"></div>other</div>
+  </div>
+</div>
+<div id="graph"></div>
+<div id="tooltip"></div>
+<script id="vis-network-data" type="application/octet-stream">{{vis_network_js_base64}}</script>
+<script id="nodes-data" type="application/json">{{nodes_json}}</script>
+<script id="edges-data" type="application/json">{{edges_json}}</script>
+<script>
+const decodeBase64Utf8 = (value) => {
+  const bytes = Uint8Array.from(atob(value.trim()), (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+};
+
+Function(decodeBase64Utf8(document.getElementById('vis-network-data').textContent))();
+
+const nodes = new vis.DataSet(JSON.parse(document.getElementById('nodes-data').textContent));
+const edges = new vis.DataSet(JSON.parse(document.getElementById('edges-data').textContent));
+const container = document.getElementById('graph');
+const data = { nodes: nodes, edges: edges };
+const options = {
+  layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 250, nodeSpacing: 100 } },
+  physics: { enabled: false },
+  interaction: { hover: true, navigationButtons: true, keyboard: true, zoomView: true },
+  edges: { smooth: { type: 'cubicBezier', roundness: 0.6 } }
+};
+const network = new vis.Network(container, data, options);
+const centerId = Number(document.body.dataset.centerId);
+
+if (!Number.isNaN(centerId)) {
+  network.focus(centerId, { scale: 1.0, animation: true });
+}
+
+const buildEditorUri = (node) => {
+  const encodedPath = encodeURI(node.file).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  return 'vscode://file/' + encodedPath + ':' + node.line + ':' + (node.col || 0);
+};
+
+network.on('doubleClick', function(params) {
+  if (params.nodes.length > 0) {
+    const node = nodes.get(params.nodes[0]);
+    if (node && node.file) {
+      window.location.href = buildEditorUri(node);
+    }
+  }
+});
+</script>
+</body>
+</html>

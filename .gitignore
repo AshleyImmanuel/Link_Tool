@@ -1,1 +1,9 @@
 /target
+/.link/
+/.codex-*/
+/tmp/
+/error.log
+/build_out.txt
+/build_errors.txt
+/test_out.txt
+/link.exe

@@ -1,15 +1,14 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{bail, Context, Result};
-use walkdir::WalkDir;
+use anyhow::{Context, Result};
 
 use crate::db::Db;
-use crate::extractor;
+use crate::error::user_error;
+use crate::extractor::ExtractorPool;
 use crate::hasher;
-use crate::lang;
 use crate::resolver;
+use crate::scan;
 
 pub fn run(quiet: bool) -> Result<()> {
     let start = Instant::now();
@@ -17,65 +16,43 @@ pub fn run(quiet: bool) -> Result<()> {
     let link_dir = cwd.join(".link");
 
     if !link_dir.join("index.db").exists() {
-        bail!("not a Link project. Run 'link init' first.");
+        return Err(user_error("not a Link project. Run 'link init' first."));
     }
 
-    let db = Db::open(&link_dir)?;
-
-    // Scan current files
-    let mut current_files: Vec<(PathBuf, String, lang::Lang)> = Vec::new();
-    for entry in WalkDir::new(&cwd)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_str().unwrap_or("");
-                !lang::should_skip_dir(name)
-            } else {
-                true
-            }
-        })
-    {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.into_path();
-        if let Some(l) = lang::detect_lang(&path) {
-            if lang::is_too_large(&path) {
-                continue;
-            }
-            let rel = path
-                .strip_prefix(&cwd)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            current_files.push((path, rel, l));
-        }
-    }
-
-    let current_paths: HashSet<String> = current_files.iter().map(|(_, r, _)| r.clone()).collect();
+    let db = Db::open_index(&link_dir)?;
+    let current_files = scan::collect_source_files(&cwd, quiet)?;
+    let current_paths: HashSet<String> = current_files
+        .iter()
+        .map(|file| file.rel_path.clone())
+        .collect();
     let stored_paths: HashSet<String> = db.all_file_paths()?.into_iter().collect();
 
-    // Classify: new, changed, deleted
-    let mut new_files = Vec::new();
-    let mut changed_files = Vec::new();
+    let mut new_files: Vec<PendingFile> = Vec::new();
+    let mut changed_files: Vec<PendingFile> = Vec::new();
     let deleted: Vec<String> = stored_paths.difference(&current_paths).cloned().collect();
 
-    for (path, rel, l) in &current_files {
-        let source = match std::fs::read(path) {
-            Ok(s) => s,
-            Err(_) => continue,
+    for file in &current_files {
+        let source = match std::fs::read(&file.abs_path) {
+            Ok(source) => source,
+            Err(err) => {
+                if !quiet {
+                    eprintln!("warning: failed to read file {}: {err}", file.rel_path);
+                }
+                continue;
+            }
         };
         let hash = hasher::hash_bytes(&source);
-        let stored_hash = db.get_file_hash(rel)?;
+        let stored_hash = db.get_file_hash(&file.rel_path)?;
 
         match stored_hash {
-            None => new_files.push((path.clone(), rel.clone(), *l, source, hash)),
-            Some(h) if h != hash => changed_files.push((path.clone(), rel.clone(), *l, source, hash)),
+            None => new_files.push(PendingFile {
+                file: file.clone(),
+                hash,
+            }),
+            Some(existing) if existing != hash => changed_files.push(PendingFile {
+                file: file.clone(),
+                hash,
+            }),
             _ => {} // unchanged
         }
     }
@@ -87,63 +64,34 @@ pub fn run(quiet: bool) -> Result<()> {
         return Ok(());
     }
 
-    // Delete symbols/edges for changed and deleted files
-    for rel in &deleted {
-        db.delete_file(rel)?;
-    }
-    for (_, rel, _, _, _) in &changed_files {
-        db.delete_symbols_for_file(rel)?;
-    }
-
-    // Parse and insert new + changed
-    for (path, rel, l, source, hash) in new_files.iter().chain(changed_files.iter()) {
-        if std::str::from_utf8(source).is_err() {
-            continue;
+    let mut extractor = ExtractorPool::default();
+    db.begin_transaction()?;
+    let update_result = apply_updates(
+        &db,
+        &mut extractor,
+        &new_files,
+        &changed_files,
+        &deleted,
+        quiet,
+    );
+    let (indexed_new, indexed_changed, resolve_stats) = match update_result {
+        Ok(result) => {
+            db.commit_transaction()?;
+            result
         }
-
-        let extracts = match extractor::extract(source, *l) {
-            Ok(e) => e,
-            Err(err) => {
-                if !quiet {
-                    eprintln!("warning: parse error in {}: {}", rel, err);
-                }
-                continue;
-            }
-        };
-
-        for sym in &extracts.symbols {
-            db.insert_symbol(&sym.name, &sym.kind, rel, sym.line, sym.col, sym.byte_start, sym.byte_end)?;
+        Err(err) => {
+            let _ = db.rollback_transaction();
+            return Err(err);
         }
-        for call in &extracts.calls {
-            db.insert_symbol(&call.callee_name, "call", rel, call.line, call.col, 0, 0)?;
-        }
-        for imp in &extracts.imports {
-            db.insert_symbol(&imp.imported_name, "import", rel, imp.line, 0, 0, 0)?;
-        }
-
-        let modified = path
-            .metadata()
-            .and_then(|m| m.modified())
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64)
-            .unwrap_or(0);
-        db.upsert_file(rel, hash, l.name(), modified)?;
-    }
-
-    // Re-resolve all edges (simple for v1; could optimize later)
-    // First clear all edges, then re-resolve
-    // Actually, since we only deleted edges for changed/deleted files,
-    // and resolver builds edges based on all symbols, we need to re-resolve globally.
-    // For simplicity: delete all edges and re-resolve.
-    db.vacuum()?; // Clean up
-    let resolve_stats = resolver::resolve(&db)?;
+    };
 
     let elapsed = start.elapsed();
 
     if !quiet {
         println!(
             "Updated: +{} new, ~{} changed, -{} deleted | {:.1}s\n  {} calls resolved, {} imports linked",
-            new_files.len(),
-            changed_files.len(),
+            indexed_new,
+            indexed_changed,
             deleted.len(),
             elapsed.as_secs_f64(),
             resolve_stats.resolved,
@@ -151,13 +99,142 @@ pub fn run(quiet: bool) -> Result<()> {
         );
     }
 
-    db.set_meta("last_scan", &{
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            .to_string()
-    })?;
-
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct PendingFile {
+    file: scan::SourceFile,
+    hash: String,
+}
+
+fn apply_updates(
+    db: &Db,
+    extractor: &mut ExtractorPool,
+    new_files: &[PendingFile],
+    changed_files: &[PendingFile],
+    deleted: &[String],
+    quiet: bool,
+) -> Result<(usize, usize, resolver::ResolveStats)> {
+    for rel_path in deleted {
+        db.delete_file(rel_path)?;
+    }
+
+    let mut indexed_new = 0usize;
+    let mut indexed_changed = 0usize;
+
+    for pending in new_files {
+        if reindex_file(db, extractor, pending, false, quiet)? {
+            indexed_new += 1;
+        }
+    }
+
+    for pending in changed_files {
+        if reindex_file(db, extractor, pending, true, quiet)? {
+            indexed_changed += 1;
+        }
+    }
+
+    db.clear_edges()?;
+    let resolve_stats = resolver::resolve(db)?;
+    db.write_index_metadata()?;
+    db.set_meta("last_scan", &chrono_now())?;
+    Ok((indexed_new, indexed_changed, resolve_stats))
+}
+
+fn reindex_file(
+    db: &Db,
+    extractor: &mut ExtractorPool,
+    pending: &PendingFile,
+    replace_existing: bool,
+    quiet: bool,
+) -> Result<bool> {
+    let source = match std::fs::read(&pending.file.abs_path) {
+        Ok(source) => source,
+        Err(err) => {
+            if !quiet {
+                eprintln!(
+                    "warning: failed to read file {}: {err}",
+                    pending.file.rel_path
+                );
+            }
+            return Ok(false);
+        }
+    };
+
+    if std::str::from_utf8(&source).is_err() {
+        if !quiet {
+            eprintln!("warning: skipping non-UTF8 file {}", pending.file.rel_path);
+        }
+        return Ok(false);
+    }
+
+    let extracts = match extractor.extract(&source, pending.file.lang) {
+        Ok(extracts) => extracts,
+        Err(err) => {
+            if !quiet {
+                eprintln!(
+                    "warning: failed to parse file {}: {err}",
+                    pending.file.rel_path
+                );
+            }
+            return Ok(false);
+        }
+    };
+
+    if replace_existing {
+        db.delete_symbols_for_file(&pending.file.rel_path)?;
+    }
+
+    for symbol in &extracts.symbols {
+        db.insert_symbol(
+            &symbol.name,
+            &symbol.kind,
+            &pending.file.rel_path,
+            symbol.line,
+            symbol.col,
+            symbol.byte_start,
+            symbol.byte_end,
+        )?;
+    }
+
+    for call in &extracts.calls {
+        db.insert_symbol(
+            &call.callee_name,
+            "call",
+            &pending.file.rel_path,
+            call.line,
+            call.col,
+            0,
+            0,
+        )?;
+    }
+
+    for import in &extracts.imports {
+        db.insert_symbol(
+            &import.imported_name,
+            "import",
+            &pending.file.rel_path,
+            import.line,
+            0,
+            0,
+            0,
+        )?;
+    }
+
+    db.upsert_file(
+        &pending.file.rel_path,
+        &pending.hash,
+        pending.file.lang.name(),
+        pending.file.last_modified,
+    )?;
+    Ok(true)
+}
+
+fn chrono_now() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string()
 }
