@@ -1,0 +1,45 @@
+use anyhow::{bail, Context, Result};
+
+use crate::db::Db;
+
+pub fn run(query: &str, quiet: bool) -> Result<()> {
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let link_dir = cwd.join(".link");
+
+    if !link_dir.join("index.db").exists() {
+        bail!("not a Link project. Run 'link init' first.");
+    }
+
+    let db = Db::open(&link_dir)?;
+    let results = db.fuzzy_search(query)?;
+
+    // Filter to definitions only
+    let defs: Vec<_> = results
+        .iter()
+        .filter(|s| s.kind != "call" && s.kind != "import")
+        .collect();
+
+    if defs.is_empty() {
+        println!("No symbols matching '{}'.", query);
+        return Ok(());
+    }
+
+    if !quiet {
+        println!("{:<30} {:<12} {}", "NAME", "KIND", "LOCATION");
+        println!("{}", "-".repeat(70));
+    }
+
+    for s in &defs {
+        if quiet {
+            println!("{}", s.name);
+        } else {
+            println!("{:<30} {:<12} {}:{}", s.name, s.kind, s.file, s.line);
+        }
+    }
+
+    if !quiet {
+        println!("\n{} matches", defs.len());
+    }
+
+    Ok(())
+}

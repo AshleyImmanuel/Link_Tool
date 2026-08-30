@@ -1,0 +1,127 @@
+﻿cargo :    Compiling link 
+v0.1.0 (D:\LINK_TOOL)
+At line:1 char:1
++ cargo test 2>&1 | 
+Out-File -Encoding utf8 
+d:\LINK_TOOL\test_out.txt; 
+ ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (     
+  Compiling link v0.1.0    
+ (D:\LINK_TOOL):String)    
+ [], RemoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+warning: fields 
+`byte_start` and 
+`byte_end` are never read
+  --> src\db.rs:56:9
+   |
+49 | pub struct Symbol {
+   |            ------ 
+fields in this struct
+...
+56 |     pub byte_start: 
+u32,
+   |         ^^^^^^^^^^
+57 |     pub byte_end: u32,
+   |         ^^^^^^^^
+   |
+   = note: `Symbol` has 
+derived impls for the 
+traits `Clone` and 
+`Debug`, but these are 
+intentionally ignored 
+during dead code analysis
+   = note: 
+`#[warn(dead_code)]` (part 
+of `#[warn(unused)]`) on 
+by default
+
+warning: field `id` is 
+never read
+  --> src\db.rs:62:9
+   |
+61 | pub struct Edge {
+   |            ---- field 
+in this struct
+62 |     pub id: i64,
+   |         ^^
+   |
+   = note: `Edge` has 
+derived impls for the 
+traits `Clone` and 
+`Debug`, but these are 
+intentionally ignored 
+during dead code analysis
+
+warning: methods 
+`get_meta`, 
+`symbol_count`, 
+`file_count`, and 
+`all_edges` are never used
+   --> src\db.rs:122:12
+    |
+ 68 | impl Db {
+    | ------- methods in 
+this implementation
+...
+122 |     pub fn 
+get_meta(&self, key: &str) 
+-> Result<Option<String>> {
+    |            ^^^^^^^^
+...
+230 |     pub fn 
+symbol_count(&self) -> 
+Result<i64> {
+    |            
+^^^^^^^^^^^^
+...
+238 |     pub fn 
+file_count(&self) -> 
+Result<i64> {
+    |            ^^^^^^^^^^
+...
+251 |     pub fn 
+all_edges(&self) -> 
+Result<Vec<Edge>> {
+    |            ^^^^^^^^^
+
+warning: `link` (bin 
+"link" test) generated 3 
+warnings (3 duplicates)
+warning: `link` (bin 
+"link") generated 3 
+warnings
+    Finished `test` 
+profile [unoptimized + 
+debuginfo] target(s) in 
+4.72s
+     Running unittests 
+src\main.rs (target\debug\d
+eps\link-fccfd8e3a18b64cd.e
+xe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running 
+tests\integration.rs (targe
+t\debug\deps\integration-db
+c5719c3ffa04cf.exe)
+
+running 8 tests
+test test_update_runs_without_init ... ok
+test test_init_creates_dot_link_folder_and_db ... ok
+test test_init_does_not_crash_on_empty_folder ... ok
+test test_list_does_not_panic_on_fresh_init ... ok
+test test_editor_command_injection_attempt_via_symbol_name ... ok
+test test_symbol_with_sql_like_name_does_not_inject ... ok
+test test_search_with_special_chars ... ok
+test test_show_non_existing_symbol_gives_nice_message ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s
+

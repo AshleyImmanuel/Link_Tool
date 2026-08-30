@@ -1,0 +1,109 @@
+﻿cargo :    Compiling 
+link v0.1.0 
+(D:\LINK_TOOL)
+At line:1 char:1
++ cargo build 
+--release 2>&1 | 
+Out-File -Encoding 
+utf8 d:\LINK_TOOL\bui 
+...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (   Compiling    
+ link v0.1.0 (D:\LI    
+NK_TOOL):String) [    
+], RemoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+warning: unused 
+import: 
+`std::path::Path`
+ --> src\commands\stats
+.rs:2:5
+  |
+2 | use 
+std::path::Path;
+  |     ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unuse
+d_imports)]` (part of 
+`#[warn(unused)]`) on 
+by default
+
+warning: fields 
+`byte_start` and 
+`byte_end` are never 
+read
+  --> src\db.rs:56:9
+   |
+49 | pub struct Symbol 
+{
+   |            ------ 
+fields in this struct
+...
+56 |     pub 
+byte_start: u32,
+   |         ^^^^^^^^^^
+57 |     pub byte_end: 
+u32,
+   |         ^^^^^^^^
+   |
+   = note: `Symbol` 
+has derived impls for 
+the traits `Clone` and 
+`Debug`, but these are 
+intentionally ignored 
+during dead code 
+analysis
+   = note: 
+`#[warn(dead_code)]` 
+(part of 
+`#[warn(unused)]`) on 
+by default
+
+warning: field `id` is 
+never read
+  --> src\db.rs:62:9
+   |
+61 | pub struct Edge {
+   |            ---- 
+field in this struct
+62 |     pub id: i64,
+   |         ^^
+   |
+   = note: `Edge` has 
+derived impls for the 
+traits `Clone` and 
+`Debug`, but these are 
+intentionally ignored 
+during dead code 
+analysis
+
+warning: method 
+`all_edges` is never 
+used
+   --> src\db.rs:251:12
+    |
+ 68 | impl Db {
+    | ------- method 
+in this implementation
+...
+251 |     pub fn 
+all_edges(&self) -> 
+Result<Vec<Edge>> {
+    |            
+^^^^^^^^^
+
+warning: `link` (bin 
+"link") generated 4 
+warnings (run `cargo 
+fix --bin "link" -p 
+link` to apply 1 
+suggestion)
+    Finished `release` 
+profile [optimized] 
+target(s) in 19.53s
