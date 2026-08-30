@@ -131,9 +131,10 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
     // Build nodes JS array
     let mut nodes_js = String::from("[");
     for (i, n) in data.nodes.iter().enumerate() {
-        let bg_color = kind_color(&n.kind);
-        let border = if n.is_center { "#FFFFFF" } else { bg_color };
-        let border_width = if n.is_center { 3 } else { 1 };
+        let type_color = kind_color(&n.kind);
+        let bg_color = "#282c34"; // Dark node background
+        let border_color = if n.is_center { "#FFD700" } else { type_color };
+        let border_width = if n.is_center { 3 } else { 2 };
         
         // Resolve absolute path for VS Code uri scheme
         let mut abs_path = match repo_root.canonicalize() {
@@ -149,8 +150,7 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
         }
         
         let abs_path = abs_path.replace('\\', "/");
-        // VS Code on Windows often expects a leading slash before the drive letter for file URIs:
-        // `vscode://file/D:/...`
+        // VS Code on Windows often expects a leading slash before the drive letter for file URIs
         let uri_path = if abs_path.chars().nth(1) == Some(':') {
             format!("/{}", abs_path)
         } else {
@@ -158,11 +158,12 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
         };
 
         nodes_js.push_str(&format!(
-            r##"{{id:{},label:"{}",color:{{background:"{}",border:"{}"}},borderWidth:{},font:{{color:"#1a1a2e",size:13}},shape:"box",margin:10,file:"{}",line:{},col:{}}}"##,
+            r##"{{id:{},label:"{}",color:{{background:"#1e1e24",border:"{}",highlight:{{background:"#2a2a35",border:"{}"}},hover:{{background:"#2a2a35",border:"{}"}}}},borderWidth:{},font:{{face:"ui-monospace, SFMono-Regular, Consolas, monospace",color:"#e2e8f0",size:13}},shape:"box",margin:10,shadow:{{enabled:true,color:"rgba(0,0,0,0.5)",size:5,x:2,y:2}},file:"{}",line:{},col:{}}}"##,
             n.id,
             escape_js(&n.label),
-            bg_color,
-            border,
+            border_color,
+            border_color,
+            border_color,
             border_width,
             escape_js(&uri_path),
             n.line,
@@ -178,7 +179,7 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
     let mut edges_js = String::from("[");
     for (i, e) in data.edges.iter().enumerate() {
         edges_js.push_str(&format!(
-            r##"{{from:{},to:{},label:"{}",arrows:"to",color:{{color:"#666",highlight:"#aaa"}},font:{{color:"#999",size:10}}}}"##,
+            r##"{{from:{},to:{},label:"{}",arrows:"to",color:{{color:"#475569",highlight:"#94a3b8",hover:"#94a3b8"}},font:{{face:"system-ui, sans-serif",color:"#94a3b8",size:11,background:"#0f0f11",strokeWidth:0}}}}"##,
             e.from,
             e.to,
             escape_js(&e.label),
@@ -201,20 +202,34 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
 <script>{vis_network_js}</script>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh; overflow: hidden; }}
-  #header {{ background: #16213e; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; height: 48px; }}
-  #header h1 {{ font-size: 16px; font-weight: 600; }}
-  #header h1 span {{ color: #FFD700; }}
-  #legend {{ display: flex; gap: 12px; font-size: 11px; }}
-  .legend-item {{ display: flex; align-items: center; gap: 4px; }}
-  .legend-dot {{ width: 10px; height: 10px; border-radius: 2px; }}
-  #graph {{ position: absolute; top: 48px; bottom: 0; left: 0; right: 0; }}
-  #tooltip {{ position: absolute; display: none; background: #16213e; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 100; }}
+  body {{ background: #0f0f11; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; height: 100vh; overflow: hidden; }}
+  #header {{ 
+    position: absolute; top: 0; left: 0; right: 0; height: 56px; z-index: 10;
+    background: rgba(15, 15, 17, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+  }}
+  #header h1 {{ font-size: 15px; font-weight: 500; letter-spacing: 0.5px; }}
+  #header h1 strong {{ color: #ffffff; font-weight: 700; }}
+  #header h1 span {{ color: #38bdf8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }}
+  #legend {{ display: flex; gap: 16px; font-size: 12px; font-weight: 500; color: #94a3b8; }}
+  .legend-item {{ display: flex; align-items: center; gap: 6px; }}
+  .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; }}
+  #graph {{ position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 1; }}
+  #tooltip {{ 
+    position: absolute; display: none; z-index: 100; pointer-events: none;
+    background: rgba(30,30,36,0.95); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+    padding: 10px 14px; color: #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }}
+  #tooltip b {{ color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; display: block; margin-bottom: 4px; }}
+  #tooltip span {{ font-size: 12px; color: #94a3b8; }}
 </style>
 </head>
 <body>
 <div id="header">
-  <h1>Link — <span>{center_name}</span></h1>
+  <h1><strong>Link</strong> <span style="color:#666">/</span> <span>{center_name}</span></h1>
   <div id="legend">
     <div class="legend-item"><div class="legend-dot" style="background:#61afef"></div>function</div>
     <div class="legend-item"><div class="legend-dot" style="background:#c678dd"></div>class/struct</div>
@@ -232,10 +247,10 @@ var edges = new vis.DataSet({edges_js});
 var container = document.getElementById('graph');
 var data = {{ nodes: nodes, edges: edges }};
 var options = {{
-  layout: {{ hierarchical: {{ direction: 'LR', sortMethod: 'directed', levelSeparation: 200, nodeSpacing: 80 }} }},
+  layout: {{ hierarchical: {{ direction: 'LR', sortMethod: 'directed', levelSeparation: 250, nodeSpacing: 100 }} }},
   physics: {{ enabled: false }},
   interaction: {{ hover: true, navigationButtons: true, keyboard: true, zoomView: true }},
-  edges: {{ smooth: {{ type: 'cubicBezier' }} }}
+  edges: {{ smooth: {{ type: 'cubicBezier', roundness: 0.6 }} }}
 }};
 var network = new vis.Network(container, data, options);
 network.focus({center_id}, {{ scale: 1.0, animation: true }});
@@ -250,7 +265,7 @@ network.on('click', function(params) {{
 network.on('hoverNode', function(params) {{
   var node = nodes.get(params.node);
   var tip = document.getElementById('tooltip');
-  tip.innerHTML = '<b>' + node.label + '</b><br>Click to open in editor';
+  tip.innerHTML = '<b>' + node.label + '</b><span>Click to open in editor</span>';
   tip.style.display = 'block';
   tip.style.left = params.event.center.x + 15 + 'px';
   tip.style.top = params.event.center.y + 15 + 'px';
