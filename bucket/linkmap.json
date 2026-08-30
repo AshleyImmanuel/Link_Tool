@@ -9,7 +9,10 @@
       "hash": "428c52f48604defae3e9a1715f10addd04806dcc7b00c89dd58de49bd5ee8558"
     }
   },
-  "notes": "Linkmap is an experimental hobby project and is still under review. Use at your own risk.\\nIf you find issues, contact Ashley via LinkedIn: https://www.linkedin.com/in/ashley-immanuel-81609731b/",
+  "notes": [
+    "Linkmap is an experimental hobby project and is still under review. Use at your own risk.",
+    "If you find issues, contact Ashley via LinkedIn: https://www.linkedin.com/in/ashley-immanuel-81609731b/"
+  ],
   "pre_install": [
     "Write-Host \"warning: linkmap is an experimental hobby project and is still under review. Use at your own risk.\" -ForegroundColor Yellow",
     "Write-Host \"warning: If you find issues, contact Ashley via LinkedIn: https://www.linkedin.com/in/ashley-immanuel-81609731b/\" -ForegroundColor Yellow"
