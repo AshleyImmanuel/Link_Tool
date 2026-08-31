@@ -69,7 +69,11 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
             "changed": node.is_changed
         }));
     }
-    let nodes_json = serde_json::to_string(&nodes_json_vec).unwrap_or_else(|_| "[]".to_string());
+    let nodes_json = serde_json::to_string(&nodes_json_vec)
+        .unwrap_or_else(|_| "[]".to_string())
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026");
 
     let mut edges_json_vec = Vec::new();
     for edge in data.edges.iter() {
@@ -95,7 +99,11 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
             }
         }));
     }
-    let edges_json = serde_json::to_string(&edges_json_vec).unwrap_or_else(|_| "[]".to_string());
+    let edges_json = serde_json::to_string(&edges_json_vec)
+        .unwrap_or_else(|_| "[]".to_string())
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026");
 
     let vis_network_js = include_str!("../../assets/vis-network.min.js");
     let vis_network_js_base64 = STANDARD.encode(vis_network_js.as_bytes());
