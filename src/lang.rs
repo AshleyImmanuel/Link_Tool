@@ -1,52 +1,98 @@
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Lang {
-    JavaScript,
-    TypeScript,
-    Tsx,
-    Python,
-    Go,
-    Rust,
-    Php,
+macro_rules! define_languages {
+    (
+        $(
+            $variant:ident {
+                name: $name:expr,
+                extensions: [$($ext:expr),*],
+                grammar: $grammar:expr,
+                query: $query:expr
+            }
+        ),* $(,)?
+    ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum Lang {
+            $($variant),*
+        }
+
+        impl Lang {
+            pub fn from_extension(ext: &str) -> Option<Self> {
+                match ext {
+                    $($($ext)|* => Some(Lang::$variant),)*
+                    _ => None,
+                }
+            }
+
+            pub fn name(&self) -> &'static str {
+                match self {
+                    $(Lang::$variant => $name),*
+                }
+            }
+
+            pub fn ts_language(&self) -> tree_sitter::Language {
+                match self {
+                    $(Lang::$variant => $grammar.into()),*
+                }
+            }
+
+            pub fn query_str(&self) -> &'static str {
+                match self {
+                    $(Lang::$variant => include_str!($query)),*
+                }
+            }
+        }
+    };
 }
 
-impl Lang {
-    pub fn from_extension(ext: &str) -> Option<Self> {
-        match ext {
-            "js" | "jsx" | "mjs" | "cjs" => Some(Lang::JavaScript),
-            "ts" | "mts" | "cts" => Some(Lang::TypeScript),
-            "tsx" => Some(Lang::Tsx),
-            "py" | "pyi" => Some(Lang::Python),
-            "go" => Some(Lang::Go),
-            "rs" => Some(Lang::Rust),
-            "php" => Some(Lang::Php),
-            _ => None,
-        }
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            Lang::JavaScript => "javascript",
-            Lang::TypeScript => "typescript",
-            Lang::Tsx => "tsx",
-            Lang::Python => "python",
-            Lang::Go => "go",
-            Lang::Rust => "rust",
-            Lang::Php => "php",
-        }
-    }
-
-    pub fn ts_language(&self) -> tree_sitter::Language {
-        match self {
-            Lang::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
-            Lang::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-            Lang::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
-            Lang::Python => tree_sitter_python::LANGUAGE.into(),
-            Lang::Go => tree_sitter_go::LANGUAGE.into(),
-            Lang::Rust => tree_sitter_rust::LANGUAGE.into(),
-            Lang::Php => tree_sitter_php::LANGUAGE_PHP.into(),
-        }
+define_languages! {
+    JavaScript {
+        name: "javascript",
+        extensions: ["js", "jsx", "mjs", "cjs"],
+        grammar: tree_sitter_javascript::LANGUAGE,
+        query: "../queries/javascript.scm"
+    },
+    TypeScript {
+        name: "typescript",
+        extensions: ["ts", "mts", "cts"],
+        grammar: tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
+        query: "../queries/typescript.scm"
+    },
+    Tsx {
+        name: "tsx",
+        extensions: ["tsx"],
+        grammar: tree_sitter_typescript::LANGUAGE_TSX,
+        query: "../queries/tsx.scm"
+    },
+    Python {
+        name: "python",
+        extensions: ["py", "pyi"],
+        grammar: tree_sitter_python::LANGUAGE,
+        query: "../queries/python.scm"
+    },
+    Go {
+        name: "go",
+        extensions: ["go"],
+        grammar: tree_sitter_go::LANGUAGE,
+        query: "../queries/go.scm"
+    },
+    Rust {
+        name: "rust",
+        extensions: ["rs"],
+        grammar: tree_sitter_rust::LANGUAGE,
+        query: "../queries/rust.scm"
+    },
+    Php {
+        name: "php",
+        extensions: ["php"],
+        grammar: tree_sitter_php::LANGUAGE_PHP,
+        query: "../queries/php.scm"
+    },
+    Java {
+        name: "java",
+        extensions: ["java"],
+        grammar: tree_sitter_java::LANGUAGE,
+        query: "../queries/java.scm"
     }
 }
 

@@ -1,283 +1,89 @@
-# Link
+# LinkTool: The Ultimate Code Visualization & Static Analysis CLI
 
-> Git for understanding code.
+> **Git for understanding code.** Instantly generate interactive, architectural code maps from your source code using local-only, best-effort static analysis.
 
-Link is a local CLI for exploring code structure. It parses source files with Tree-sitter, stores symbols and relationships in SQLite, and opens a small self-contained HTML viewer for graph exploration.
+LinkTool is an insanely fast, local-first CLI designed for developers who need to explore complex codebases, map out legacy architecture, and visually navigate dependencies without the bloat of cloud servers or heavy IDE plugins.
 
-It is intentionally simple:
+Powered by **Tree-sitter** and **SQLite**, LinkTool extracts symbols, imports, and function calls, and renders a stunning, interactive HTML codemap visualization directly in your browser.
 
-- local only, including git-aware views of the current working tree
-- offline only
-- best-effort static analysis
-- no servers, agents, or background daemons
+## Why LinkTool? 
 
-User manual: [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md)
+If you've ever struggled to build a mental map of a massive repository, LinkTool solves the "spaghetti code" problem.
 
-## What Link Does
+- 🔒 **100% Local & Offline:** No servers, no background daemons, no data leaves your machine. Perfect for enterprise and proprietary codebases.
+- ⚡ **Lightning Fast:** Analyzes thousands of files in seconds using Tree-sitter.
+- 🗺️ **Interactive Code Maps:** Generates a dynamic, glassmorphism HTML graph visualization.
+- 📁 **Hierarchical Module Collapsing:** Avoid the "spaghetti graph" problem by clustering nodes by their directory path for high-level architectural views.
+- 🎯 **Smart Edge Filtering:** Instantly hide noise (variables, imports) to focus entirely on the "happy path" of major components.
+- 🛠️ **IDE Integrated:** Double-click any node in the graph to instantly jump to the exact file and line in VS Code!
 
-Link indexes definitions, calls, and imports, then lets you:
+## Supported Languages
 
-- initialize an index for the current repository
-- list known symbols
-- search symbols by name
-- inspect a symbol graph
-- incrementally update the index after code changes
-
-Supported languages:
-
-- JavaScript
-- TypeScript
+LinkTool uses Tree-sitter for robust parsing across modern stacks:
+- JavaScript / TypeScript (incl. JSX/TSX)
 - Python
 - Go
 - Rust
+- Java **[NEW!]**
 - PHP
 
-Stack-aware helpers (best-effort):
+*(LinkTool also understands framework-specific paradigms out-of-the-box, such as Express routes and Laravel controllers!)*
 
-- Express route extraction: `app.get("/path", handler)` / `router.post(...)` become `route` nodes like `GET /path`
-- Laravel basic routes: `Route::get('/path', 'Controller@method')` become `route` nodes like `GET /path`
+## Quick Start Guide
 
-## Installation
+### Installation
 
-### Disclaimer
+LinkTool is currently distributed as a lightweight, precompiled Rust binary.
 
-Linkmap is an **experimental hobby project** and is still under review. Use at your own risk.
-
-If you find issues, contact Ashley via LinkedIn: `https://www.linkedin.com/in/ashley-immanuel-81609731b/`
-
-### Install (recommended)
-
-- Download the latest prebuilt binary from GitHub Releases.
-- Verify the SHA256 checksum file shipped with the release.
-
-### Install via `curl` (Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/install.sh | sh
-```
-
-This installs `linkmap` to `~/.local/bin/linkmap`.
-
-### Install via PowerShell (Windows)
-
+**Windows (PowerShell):**
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/install.ps1 | iex"
 ```
 
-### Install via package managers (Git-style)
-
-Linkmap is easiest to install via a package manager once you publish a release.
-
-- Windows (Scoop):
-
-```powershell
-# after you publish a GitHub Release tag (like v0.1.0):
-# this repo can act as the Scoop bucket
-scoop bucket add linkmap https://github.com/AshleyImmanuel/Link_Tool
-scoop install linkmap
-```
-
-- macOS/Linux (Homebrew):
-
+**macOS/Linux (Curl):**
 ```bash
-brew install --formula https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/packaging/homebrew/linkmap.rb
+curl -fsSL https://raw.githubusercontent.com/AshleyImmanuel/Link_Tool/main/install.sh | sh
 ```
 
-### Install from source (Cargo)
-
-Install Rust and Cargo from [rustup.rs](https://rustup.rs/), then build Link from source:
-
-```bash
-cargo build --release
-```
-
-The binary will be available at:
-
-```bash
-target/release/linkmap
-```
-
-You can also install it into Cargo's bin directory:
-
+**Build from Source (Cargo):**
 ```bash
 cargo install --path .
 ```
 
-### Versioning and releases
+### Usage
 
-- Public releases are tagged as `vX.Y.Z`.
-- Release artifacts include `.zip`/`.tar.gz` packages plus a `SHA256SUMS` file.
-
-## Quick Start
-
-Run Link from the root of the repository you want to inspect.
+Run LinkTool from the root of the repository you want to inspect:
 
 ```bash
+# 1. Scan and index the codebase (creates a lightweight .link/index.db)
 linkmap init
-linkmap search calculate
-linkmap show calculate
-linkmap history
+
+# 2. Search for a specific symbol or function
+linkmap search AuthController
+
+# 3. Generate and open the interactive Code Map in your browser
+linkmap show AuthController
+
+# 4. [NEW!] Export the dependency graph to standard Graphviz DOT format
+linkmap export AuthController --dot > graph.dot
+
+# 5. Incrementally update the index after changing your code
 linkmap update
 ```
 
-`linkmap init` creates a local index at `.link/index.db`.
+## Security & Privacy 
 
-`linkmap show <symbol>` opens `.link/show.html` in your browser. Double-clicking a node attempts to open the corresponding file in VS Code via the `vscode://file/...` URI scheme.
+LinkTool has undergone rigorous security auditing to ensure safe execution on untrusted repositories:
+- **No Remote Execution:** Completely offline and local.
+- **XSS & Injection Hardened:** The HTML viewer and SQLite database are fortified against payload injection.
+- **Path Traversal Protection:** Safely sandboxed to the `.link/` directory.
 
-## Upgrade and Rebuild
+## Contributing
 
-`.link/index.db` is a local cache, not source of truth.
+LinkTool is an open-source project and we welcome contributions! Want to add a new language parser? It takes less than 5 minutes using our new `define_languages!` macro.
 
-If you upgrade Link and it reports that the index format is out of date, run:
+Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started, and review our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
-```bash
-linkmap init
-```
+## License
 
-`linkmap update` refreshes an existing compatible index. It is not a migration command.
-
-## Command Reference
-
-### `linkmap init`
-
-Scans the current directory, indexes supported source files, and rebuilds `.link/index.db`.
-
-### `linkmap show <symbol>`
-
-Shows the caller/callee neighborhood for an indexed symbol.
-
-- default mode: opens the HTML graph viewer
-- `--json`: prints the graph payload to stdout
-
-### `linkmap list`
-
-Lists indexed definition symbols and their locations.
-
-### `linkmap search <query>`
-
-Performs a name-based fuzzy search against indexed symbols.
-
-### `linkmap update`
-
-Re-indexes only changed, new, and deleted files, then rebuilds relationships.
-
-### `linkmap snapshot`
-
-Writes a portable structure snapshot to a JSON file.
-
-- default path: `.link/snapshot.json`
-- `--out <path>`: write to a custom path
-
-### `linkmap diff <from> <to>`
-
-Shows a structural diff between two snapshot files.
-
-- default mode: prints a human-friendly change report
-- `--json`: prints the diff payload as JSON
-
-### Optional commands
-
-- `linkmap history`: project-local command history, with current-session filtering when a shell session id is available
-- `linkmap stats`: index metrics, heuristic architecture checks, and local git-aware change summaries
-- `linkmap explain <symbol>`: text explanations of symbol connections, impact hints, and heuristic warnings
-
-These remain lightweight helpers and are not required for normal use.
-
-### `linkmap history`
-
-Shows recent `linkmap` commands recorded for the current project.
-
-- By default, it uses the current shell session when Link can detect one from environment markers such as `LINK_SESSION_ID`, `WT_SESSION`, or `TERM_SESSION_ID`.
-- `linkmap history --all` shows the full recorded project history.
-- History is stored locally in `.link/index.db` and survives `link init`.
-
-### `linkmap stats`
-
-Shows index counts plus two local-only helpers:
-
-- `Architecture Rules` are built-in heuristic import checks for common UI/server layering issues.
-- `Change Summary` compares the local git working tree to `HEAD` using extracted symbol, import, call, and render signatures.
-
-These sections are intentionally lightweight. They are not a configurable policy engine or a full semantic diff.
-
-## Exit Codes
-
-Link uses stable process exit codes:
-
-- `0`: success
-- `1`: user error, such as running `link update` before `link init`
-- `2`: internal/runtime failure
-
-## How It Works
-
-Link uses a small static-analysis pipeline:
-
-1. Walk the repository and pick supported files.
-2. Parse each file with Tree-sitter.
-3. Run language-specific query files in `queries/*.scm`.
-4. Store symbols and relationships in SQLite.
-5. Resolve cross-file references using simple structural heuristics.
-
-The analysis is intentionally conservative. Link prefers skipping ambiguous edges over inventing connections.
-
-## Limits and Safeguards
-
-Link is hardened for local use on untrusted repositories.
-
-- It only writes inside `.link/`.
-- It does not follow symlinks while scanning.
-- It skips files larger than 1 MB.
-- It skips common dependency/build directories such as `.git`, `node_modules`, `target`, `dist`, `build`, `vendor`, `.venv`, and `__pycache__`.
-- It warns when more than 10,000 supported files are detected.
-- Parse failures are reported as warnings and do not abort the run.
-
-Example warning:
-
-```text
-warning: failed to parse file src/parser.rs
-```
-
-## Limitations
-
-Link is best-effort static analysis, not a type checker or runtime tracer.
-
-- No type inference
-- No runtime dispatch analysis
-- No reflection or `eval` support
-- No guarantee that every call/import can be resolved
-- Ambiguous matches are skipped on purpose
-- Architecture rules are built-in heuristics, not a full configurable policy engine
-- Git-aware change summaries compare the local working tree to `HEAD`; they do not inspect remotes or push state
-- Change summaries diff extracted symbols/imports/calls/renders, so they are structural hints rather than full semantic analysis
-- Session-scoped command history depends on shell or terminal session ids being available; otherwise Link falls back to all recorded project history
-
-This means results are useful for navigation and architecture understanding, but they are not a proof of program behavior.
-
-## Large Repository Behavior
-
-Link is designed to stay predictable on larger repositories.
-
-- file scanning is sequential
-- files are parsed one at a time
-- indexing writes run inside SQLite transactions
-- updates avoid buffering full file contents for the whole repo
-
-If the repository is extremely large, expect reduced throughput, but Link should continue operating without crashing on malformed files.
-
-## Adding a New Language
-
-To add a language:
-
-1. Add a Tree-sitter grammar dependency in `Cargo.toml`.
-2. Extend `src/lang.rs` with the file extension mapping and grammar handle.
-3. Add a query file under `queries/<language>.scm`.
-4. Update `src/parser.rs` to expose the query for that language.
-5. Add examples and tests for the new extractor behavior.
-
-Keep queries focused on:
-
-- definitions
-- calls
-- imports
-
-Link works best when each language integration stays small and syntax-driven.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -73,11 +73,18 @@
   let currentSelection = null;
 
   const setBadges = (badges) => {
-    sideBadges.innerHTML = '';
+    sideBadges.textContent = '';
     for (const b of badges) {
       const el = document.createElement('div');
       el.className = 'badge';
-      el.innerHTML = `<span class="dot" style="background:${b.color}"></span>${b.text}`;
+      
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = b.color;
+      
+      el.appendChild(dot);
+      el.appendChild(document.createTextNode(b.text));
+      
       sideBadges.appendChild(el);
     }
   };
@@ -113,6 +120,68 @@
     side.style.display = 'none';
     toast('Inspector hidden (reload page to restore).');
   });
+
+  let isFiltered = false;
+  document.getElementById('btnFilter').addEventListener('click', () => {
+    isFiltered = !isFiltered;
+    const noisyKinds = ['import', 'variable', 'call'];
+    const updates = [];
+    nodes.forEach(node => {
+      if (noisyKinds.includes(node.kind)) {
+        updates.push({ id: node.id, hidden: isFiltered });
+      }
+    });
+    nodes.update(updates);
+    document.getElementById('btnFilter').textContent = isFiltered ? 'Show Noise' : 'Hide Noise';
+    toast(isFiltered ? 'Noise hidden' : 'Noise shown');
+  });
+
+  let isClustered = false;
+  document.getElementById('btnCluster').addEventListener('click', () => {
+    if (isClustered) {
+      const clusterIds = Object.keys(network.body.nodes).filter(k => network.isCluster(k));
+      for (const id of clusterIds) {
+        network.openCluster(id);
+      }
+      isClustered = false;
+      document.getElementById('btnCluster').textContent = 'Cluster by Folder';
+      toast('Unclustered');
+      return;
+    }
+
+    const folders = new Set();
+    nodes.forEach(n => {
+      if (n.file) {
+        const parts = n.file.split('/');
+        parts.pop(); 
+        folders.add(parts.join('/'));
+      }
+    });
+
+    for (const folder of folders) {
+      if (!folder) continue;
+      network.cluster({
+        joinCondition: function (childOptions) {
+          if (!childOptions.file) return false;
+          const parts = childOptions.file.split('/');
+          parts.pop();
+          return parts.join('/') === folder;
+        },
+        clusterNodeProperties: {
+          id: 'cluster_' + folder,
+          label: '📁 ' + folder,
+          shape: 'box',
+          color: { background: '#1e293b', border: '#475569' },
+          font: { color: '#f8fafc', size: 14, face: 'monospace' }
+        }
+      });
+    }
+    
+    isClustered = true;
+    document.getElementById('btnCluster').textContent = 'Uncluster';
+    toast('Clustered by folder');
+  });
+
   document.getElementById('btnFit').addEventListener('click', () => network.fit({ animation: true }));
   document.getElementById('btnCenter').addEventListener('click', () => {
     if (!Number.isNaN(centerId)) network.focus(centerId, { scale: 1.0, animation: true });

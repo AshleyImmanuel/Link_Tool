@@ -1,0 +1,56 @@
+# LinkTool (linkmap) AI Documentation
+
+This document is designed to help Large Language Models (LLMs) and AI agents understand the architecture, design philosophy, and usage of the LinkTool (`linkmap`) codebase.
+
+## Project Overview
+LinkTool is a local-only, fast, best-effort static analysis CLI tool designed to help developers explore code structures and architectures. 
+
+It works by:
+1. Parsing code files via **Tree-sitter**.
+2. Storing symbols, references, imports, and calls in a local **SQLite** database (`.link/index.db`).
+3. Generating a self-contained, interactive **HTML** visual graph using `vis-network` (`.link/show.html`).
+
+## Core Philosophy
+- **Strictly Local & Offline**: No network requests, no servers, no telemetry.
+- **Speed Over 100% Accuracy**: It uses syntactic extraction (via Tree-sitter queries), not full compiler-level semantic resolution. If a connection is ambiguous, it is usually skipped to avoid false positives.
+- **Zero Config**: It should "just work" on any supported repository.
+
+## Architecture & Code Map
+The project is written in **Rust** (Edition 2021). 
+
+### Key Modules:
+- `src/main.rs`: The CLI entrypoint using `clap`.
+- `src/db/mod.rs`: The SQLite wrapper (`rusqlite`). Manages all schema creation and data access.
+- `src/lang.rs`: The core language definition module. It uses a custom `define_languages!` macro to register Tree-sitter grammars (JavaScript, Rust, Python, Go, Java, PHP) and their corresponding `.scm` query files.
+- `src/parser.rs`: Handles execution of Tree-sitter queries against source code.
+- `src/extractor.rs`: Maps Tree-sitter query captures into normalized data structures (`Symbol`, `Call`, `Import`, `Render`).
+- `src/viewer/`: Responsible for generating the HTML output and DOT output.
+  - `src/viewer/html.rs`: Injects data into `assets/template.html` and `assets/viewer.js`.
+- `assets/`: Contains the frontend code.
+  - `viewer.js`: Manages the `vis-network` graph logic, including custom features like "Cluster by Folder" and "Hide Noise".
+
+## Adding New Features (For AI Agents)
+If an AI agent is tasked with extending LinkTool, it should follow these patterns:
+
+1. **Adding a New Language**: 
+   - DO NOT hardcode language logic.
+   - Use the `define_languages!` macro in `src/lang.rs`.
+   - Ensure the new `tree-sitter-<lang>` crate is added to `Cargo.toml`.
+   - Add the corresponding `queries/<lang>.scm` file.
+2. **Database Changes**:
+   - Any new tables or indices must be added to the `SCHEMA` constant in `src/db/mod.rs`. 
+   - All SQL queries must use parameterized execution (e.g., `params![...]`) to prevent SQL Injection.
+3. **Frontend Changes**:
+   - The frontend is intentionally raw HTML/JS/CSS without a build step (no React/Vue).
+   - Any templates must replace string variables carefully (e.g., wrapping in `/* {{var}} */` to satisfy IDE linters).
+   - All dynamic text injection in JS must avoid `.innerHTML` to prevent DOM XSS. Use `document.createElement()` and `textContent`.
+
+## Security Considerations
+- **Path Traversal**: Always validate file paths to ensure they stay within the repository bounds (`safe_repo_file_path`).
+- **Command Injection**: When shelling out (e.g., calling `git`), always use `Command::new("binary").args(...)` instead of passing raw shell strings.
+
+## Commands
+- `linkmap init`: Indexes the repo.
+- `linkmap show <symbol>`: Opens the interactive graph.
+- `linkmap export <symbol> --dot`: Exports the dependency graph in Graphviz DOT format.
+- `linkmap update`: Incrementally updates changed files.

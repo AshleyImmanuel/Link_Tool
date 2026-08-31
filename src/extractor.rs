@@ -173,7 +173,7 @@ impl ExtractorPool {
 impl LanguageExtractor {
     fn new(lang: Lang) -> Result<Self> {
         let parser = parser::new_parser(lang)?;
-        let query_src = parser::query_str(lang);
+        let query_src = lang.query_str();
         let query = Query::new(&lang.ts_language(), query_src)
             .with_context(|| format!("failed to load tree-sitter query for {}", lang.name()))?;
         let capture_names = query

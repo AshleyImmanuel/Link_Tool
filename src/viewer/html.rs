@@ -12,8 +12,8 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf());
 
-    let mut nodes_json = String::from("[");
-    for (index, node) in data.nodes.iter().enumerate() {
+    let mut nodes_json_vec = Vec::new();
+    for node in data.nodes.iter() {
         let type_color = kind_color(&node.kind);
         let uri_path = safe_repo_file_path(&repo_root, &node.file).unwrap_or_default();
         let border_width = if node.is_center { 4 } else { 2 };
@@ -35,45 +35,67 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
             "#1b1e2d"
         };
 
-        nodes_json.push_str(&format!(
-            r##"{{"id":{},"label":"{}","title":"{}","color":{{"background":"{}","border":"{}","highlight":{{"background":"{}","border":"{}"}},"hover":{{"background":"{}","border":"{}"}}}},"borderWidth":{},"font":{{"face":"ui-monospace, SFMono-Regular, Consolas, monospace","color":"#f8fafc","size":14,"strokeWidth":3,"strokeColor":"#0b0b0f"}},"shape":"box","margin":10,"shadow":{{"enabled":true,"color":"rgba(0,0,0,0.55)","size":6,"x":2,"y":2}},"file":"{}","line":{},"col":{},"changed":{}}}"##,
-            node.id,
-            escape_js(&node.label),
-            escape_js(&node.title),
-            background,
-            border_color,
-            highlight_bg,
-            border_color,
-            highlight_bg,
-            border_color,
-            border_width,
-            escape_js(&uri_path),
-            node.line,
-            node.col,
-            node.is_changed,
-        ));
-        if index + 1 < data.nodes.len() {
-            nodes_json.push(',');
-        }
+        nodes_json_vec.push(serde_json::json!({
+            "id": node.id,
+            "label": node.label,
+            "kind": node.kind,
+            "title": node.title,
+            "color": {
+                "background": background,
+                "border": border_color,
+                "highlight": { "background": highlight_bg, "border": border_color },
+                "hover": { "background": highlight_bg, "border": border_color }
+            },
+            "borderWidth": border_width,
+            "font": {
+                "face": "ui-monospace, SFMono-Regular, Consolas, monospace",
+                "color": "#f8fafc",
+                "size": 14,
+                "strokeWidth": 3,
+                "strokeColor": "#0b0b0f"
+            },
+            "shape": "box",
+            "margin": 10,
+            "shadow": {
+                "enabled": true,
+                "color": "rgba(0,0,0,0.55)",
+                "size": 6,
+                "x": 2,
+                "y": 2
+            },
+            "file": uri_path,
+            "line": node.line,
+            "col": node.col,
+            "changed": node.is_changed
+        }));
     }
-    nodes_json.push(']');
+    let nodes_json = serde_json::to_string(&nodes_json_vec).unwrap_or_else(|_| "[]".to_string());
 
-    let mut edges_json = String::from("[");
-    for (index, edge) in data.edges.iter().enumerate() {
+    let mut edges_json_vec = Vec::new();
+    for edge in data.edges.iter() {
         let color = if edge.changed { "#fbbf24" } else { "#64748b" };
-        edges_json.push_str(&format!(
-            r##"{{"from":{},"to":{},"label":"{}","title":"{}","arrows":"to","color":{{"color":"{}","highlight":"#cbd5e1","hover":"#cbd5e1"}},"font":{{"face":"system-ui, sans-serif","color":"#cbd5e1","size":11,"background":"#0b0b0f","strokeWidth":3,"strokeColor":"#0b0b0f"}}}}"##,
-            edge.from,
-            edge.to,
-            escape_js(&edge.label),
-            escape_js(&edge.title),
-            color,
-        ));
-        if index + 1 < data.edges.len() {
-            edges_json.push(',');
-        }
+        edges_json_vec.push(serde_json::json!({
+            "from": edge.from,
+            "to": edge.to,
+            "label": edge.label,
+            "title": edge.title,
+            "arrows": "to",
+            "color": {
+                "color": color,
+                "highlight": "#cbd5e1",
+                "hover": "#cbd5e1"
+            },
+            "font": {
+                "face": "system-ui, sans-serif",
+                "color": "#cbd5e1",
+                "size": 11,
+                "background": "#0b0b0f",
+                "strokeWidth": 3,
+                "strokeColor": "#0b0b0f"
+            }
+        }));
     }
-    edges_json.push(']');
+    let edges_json = serde_json::to_string(&edges_json_vec).unwrap_or_else(|_| "[]".to_string());
 
     let vis_network_js = include_str!("../../assets/vis-network.min.js");
     let vis_network_js_base64 = STANDARD.encode(vis_network_js.as_bytes());
@@ -92,8 +114,8 @@ pub fn generate_html(data: &GraphData, repo_root: &Path) -> String {
         .replace("{{vis_network_js_base64}}", &vis_network_js_base64)
         .replace("{{nodes_json}}", &nodes_json)
         .replace("{{edges_json}}", &edges_json)
-        .replace("{{viewer_css}}", &viewer_css)
-        .replace("{{viewer_js}}", viewer_js)
+        .replace("/* {{viewer_css}} */", &viewer_css)
+        .replace("/* {{viewer_js}} */", viewer_js)
         .replace("{{center_id}}", &data.center_symbol.id.to_string())
 }
 
@@ -126,9 +148,6 @@ fn kind_color(kind: &str) -> &'static str {
     }
 }
 
-fn escape_js(s: &str) -> String {
-    escape_json_string(s)
-}
 
 fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -168,22 +187,3 @@ fn safe_repo_file_path(repo_root: &Path, relative_path: &str) -> Option<String> 
     Some(path.replace('\\', "/"))
 }
 
-fn escape_json_string(s: &str) -> String {
-    let mut escaped = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            '<' => escaped.push_str("\\u003C"),
-            '>' => escaped.push_str("\\u003E"),
-            '&' => escaped.push_str("\\u0026"),
-            '\u{2028}' => escaped.push_str("\\u2028"),
-            '\u{2029}' => escaped.push_str("\\u2029"),
-            _ => escaped.push(ch),
-        }
-    }
-    escaped
-}

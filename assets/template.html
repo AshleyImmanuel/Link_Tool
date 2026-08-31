@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Linkmap - {{center_name}}</title>
-<style>{{viewer_css}}</style>
+<style>/* {{viewer_css}} */</style>
 </head>
 <body data-center-id="{{center_id}}">
 <header id="header" class="navbar">
@@ -23,7 +23,9 @@
       </div>
 
       <div class="btn-group">
-        <button class="btn btn-primary" id="btnFit">Fit</button>
+        <button class="btn btn-primary" id="btnCluster">Cluster by Folder</button>
+        <button class="btn btn-outline-secondary" id="btnFilter">Hide Noise</button>
+        <button class="btn btn-outline-secondary" id="btnFit">Fit</button>
         <button class="btn btn-outline-secondary" id="btnCenter">Center</button>
         <button class="btn btn-outline-secondary" id="btnClear">Clear</button>
       </div>
@@ -75,6 +77,6 @@
 <script id="vis-network-data" type="application/octet-stream">{{vis_network_js_base64}}</script>
 <script id="nodes-data" type="application/json">{{nodes_json}}</script>
 <script id="edges-data" type="application/json">{{edges_json}}</script>
-<script>{{viewer_js}}</script>
+<script>/* {{viewer_js}} */</script>
 </body>
 </html>

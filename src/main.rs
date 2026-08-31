@@ -102,6 +102,20 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Export symbol graph to a standard format (e.g. Graphviz DOT)
+    Export {
+        /// Symbol name to export
+        symbol: String,
+        /// Export as Graphviz DOT format
+        #[arg(long)]
+        dot: bool,
+        /// Output path (defaults to stdout)
+        #[arg(long)]
+        out: Option<String>,
+        /// Suppress output
+        #[arg(long)]
+        quiet: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -139,6 +153,12 @@ fn run() -> Result<()> {
         Commands::Explain { symbol } => commands::explain::run(&symbol),
         Commands::Snapshot { out, quiet } => commands::snapshot::run(out.as_deref(), quiet),
         Commands::Diff { from, to, json } => commands::diff::run(&from, &to, json),
+        Commands::Export {
+            symbol,
+            dot,
+            out,
+            quiet,
+        } => commands::export::run(&symbol, dot, out.as_deref(), quiet),
     };
 
     if let Some(cwd) = cwd {
@@ -157,6 +177,7 @@ fn command_quiet(command: &Commands) -> bool {
         Commands::Search { quiet, .. } => *quiet,
         Commands::Update { quiet } => *quiet,
         Commands::Snapshot { quiet, .. } => *quiet,
+        Commands::Export { quiet, .. } => *quiet,
         // Other commands don't currently support --quiet, so we show the disclaimer.
         Commands::History { .. }
         | Commands::Stats
