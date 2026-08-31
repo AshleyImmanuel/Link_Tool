@@ -89,6 +89,16 @@ impl ExtractorPool {
         let mut result = FileExtracts::default();
 
         while let Some(m) = matches.next() {
+            let mut import_name = None;
+            let mut import_source = None;
+            let mut import_line = 0;
+
+            let mut route_method = None;
+            let mut route_path = None;
+            let mut route_handler = None;
+            let mut route_line = 0;
+            let mut route_col = 0;
+
             for capture in m.captures {
                 let idx = capture.index as usize;
                 let Some(name) = extractor.capture_names.get(idx) else {
@@ -124,41 +134,37 @@ impl ExtractorPool {
                         col: start.column as u32,
                     });
                 } else if name == "import.name" {
-                    result.imports.push(RawImport {
-                        imported_name: text,
-                        source_module: String::new(),
-                        line: start.row as u32 + 1,
-                    });
+                    import_name = Some(text);
+                    import_line = start.row as u32 + 1;
                 } else if name == "import.source" {
-                    let text = text.trim_matches(|c| c == '\'' || c == '"').to_string();
-                    if let Some(imp) = result.imports.last_mut() {
-                        if imp.source_module.is_empty() && imp.line == start.row as u32 + 1 {
-                            imp.source_module = text;
-                        }
-                    }
+                    import_source = Some(text.trim_matches(|c| c == '\'' || c == '"').to_string());
                 } else if name == "route.method" {
-                    result.routes.push(RawRoute {
-                        method: text.to_ascii_uppercase(),
-                        path: String::new(),
-                        handler_name: String::new(),
-                        line: start.row as u32 + 1,
-                        col: start.column as u32,
-                    });
+                    route_method = Some(text.to_ascii_uppercase());
+                    route_line = start.row as u32 + 1;
+                    route_col = start.column as u32;
                 } else if name == "route.path" {
-                    let text = text.trim_matches(|c| c == '\'' || c == '"').to_string();
-                    if let Some(route) = result.routes.last_mut() {
-                        if route.path.is_empty() && route.line == start.row as u32 + 1 {
-                            route.path = text;
-                        }
-                    }
+                    route_path = Some(text.trim_matches(|c| c == '\'' || c == '"').to_string());
                 } else if name == "route.handler" {
-                    if let Some(route) = result.routes.last_mut() {
-                        if route.handler_name.is_empty() && route.line == start.row as u32 + 1 {
-                            route.handler_name =
-                                text.trim_matches(|c| c == '\'' || c == '"').to_string();
-                        }
-                    }
+                    route_handler = Some(text.trim_matches(|c| c == '\'' || c == '"').to_string());
                 }
+            }
+
+            if let (Some(name), Some(source)) = (import_name, import_source) {
+                result.imports.push(RawImport {
+                    imported_name: name,
+                    source_module: source,
+                    line: import_line,
+                });
+            }
+
+            if let (Some(method), Some(path), Some(handler)) = (route_method, route_path, route_handler) {
+                result.routes.push(RawRoute {
+                    method,
+                    path,
+                    handler_name: handler,
+                    line: route_line,
+                    col: route_col,
+                });
             }
         }
 

@@ -297,7 +297,7 @@ fn resolve_relative_module_paths(caller_dir: &Path, source_module: &str) -> Opti
         return Some(dedupe(candidates));
     }
 
-    for ext in [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"] {
+    for ext in [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".php"] {
         candidates.push(format!("{base_norm}{ext}"));
     }
 
@@ -332,7 +332,7 @@ fn normalize_rel_path(path: &Path) -> String {
 fn has_known_ext(path: &str) -> bool {
     matches!(
         PathBuf::from(path).extension().and_then(|e| e.to_str()),
-        Some("ts" | "tsx" | "js" | "jsx" | "py" | "go" | "rs")
+        Some("ts" | "tsx" | "js" | "jsx" | "py" | "go" | "rs" | "java" | "php")
     )
 }
 
